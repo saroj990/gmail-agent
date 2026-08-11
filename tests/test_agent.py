@@ -15,6 +15,7 @@ from app.agent import (
     format_proposal,
     validate_decision,
 )
+from app.database import DecisionStore
 from app.models import Action, Category, ClassificationResult, EmailMessage, Importance
 from app.tools import ToolError
 
@@ -163,16 +164,46 @@ def test_execute_cannot_call_forbidden_tool_names() -> None:
         tools.invoke("delete")
 
 
-def test_run_fetches_via_tools_and_processes() -> None:
-    email = EmailMessage(message_id="msg-1", thread_id="t1", subject="Hi")
-    agent = GmailAgent(service=MagicMock(), mode="dry_run", max_emails=1)
+def test_run_skips_cached_message_ids(tmp_path) -> None:
+    email_new = EmailMessage(message_id="msg-new", thread_id="t1", subject="New")
+    store = DecisionStore(db_path=tmp_path / "decisions.db")
+    store.save_decision(
+        EmailMessage(message_id="msg-old", thread_id="t0", subject="Old"),
+        _decision(),
+        execution_note="already done",
+    )
 
-    with (
-        patch.object(agent, "fetch_emails", return_value=[email]),
-        patch.object(agent, "process_email") as mock_process,
-    ):
+    tools = MagicMock()
+    tools.invoke.side_effect = [
+        [{"id": "msg-old", "threadId": "t0"}, {"id": "msg-new", "threadId": "t1"}],
+        email_new,
+    ]
+    agent = GmailAgent(
+        service=MagicMock(),
+        mode="dry_run",
+        tools=tools,
+        store=store,
+    )
+
+    with patch.object(agent, "process_email") as mock_process:
         mock_process.return_value = MagicMock()
         results = agent.run()
 
+    assert agent.skipped_cached == 1
     assert len(results) == 1
-    mock_process.assert_called_once_with(email)
+    mock_process.assert_called_once_with(email_new)
+
+
+def test_process_email_persists_decision(tmp_path) -> None:
+    email = EmailMessage(message_id="msg-1", thread_id="t1", subject="Sale")
+    store = DecisionStore(db_path=tmp_path / "decisions.db")
+    agent = GmailAgent(service=MagicMock(), mode="dry_run", store=store)
+
+    with patch("app.agent.classify", return_value=_decision()):
+        result = agent.process_email(email)
+
+    assert store.has_message("msg-1") is True
+    row = store.get_decision("msg-1")
+    assert row is not None
+    assert "dry_run" in result.execution_note
+    assert row["execution_note"] == result.execution_note

@@ -33,6 +33,11 @@ CONFIDENCE_THRESHOLD = float(
     os.getenv("CONFIDENCE_THRESHOLD", os.getenv("CLASSIFICATION_THRESHOLD", "0.95"))
 )
 
+# Lesson 10: local SQLite audit / dedupe store.
+DATABASE_PATH = Path(
+    os.getenv("DATABASE_PATH", PROJECT_ROOT / "data" / "decisions.db")
+)
+
 # Lesson 5+: modify scope is required to create/apply labels.
 # This does NOT allow permanent delete.
 GMAIL_SCOPES = ("https://www.googleapis.com/auth/gmail.modify",)

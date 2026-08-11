@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from app.database import DecisionStore
 from app.models import Action, Category, ClassificationResult, EmailMessage, Importance
 from app.review import (
     ReviewItem,
@@ -84,33 +85,46 @@ def test_print_summary_output(capsys) -> None:
     assert "Archive candidates:    1" in out
 
 
-def test_run_review_archives_on_approval() -> None:
+def test_run_review_archives_on_approval(tmp_path) -> None:
     service = MagicMock()
     item = _item(category=Category.TO_PROCESS, confidence=0.99, message_id="msg-9")
     answers = iter(["a"])
+    store = DecisionStore(db_path=tmp_path / "t.db")
 
     with (
         patch("app.review.classify_batch", return_value=[item]),
         patch("app.review.label_and_archive") as mock_archive,
         patch("app.review.trash_message") as mock_trash,
     ):
-        run_review(service, threshold=0.8, input_fn=lambda _prompt: next(answers))
+        run_review(
+            service,
+            threshold=0.8,
+            input_fn=lambda _prompt: next(answers),
+            store=store,
+        )
 
     mock_archive.assert_called_once_with(service, "msg-9")
     mock_trash.assert_not_called()
+    assert store.has_message("msg-9") is True
 
 
-def test_run_review_trash_requires_confirm() -> None:
+def test_run_review_trash_requires_confirm(tmp_path) -> None:
     service = MagicMock()
     item = _item(category=Category.TO_PROCESS, confidence=0.99, message_id="msg-9")
     answers = iter(["t", "trash"])
+    store = DecisionStore(db_path=tmp_path / "t.db")
 
     with (
         patch("app.review.classify_batch", return_value=[item]),
         patch("app.review.label_and_archive") as mock_archive,
         patch("app.review.trash_message") as mock_trash,
     ):
-        run_review(service, threshold=0.8, input_fn=lambda _prompt: next(answers))
+        run_review(
+            service,
+            threshold=0.8,
+            input_fn=lambda _prompt: next(answers),
+            store=store,
+        )
 
     mock_trash.assert_called_once_with(service, "msg-9")
     mock_archive.assert_not_called()

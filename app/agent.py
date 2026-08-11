@@ -1,23 +1,21 @@
-"""Agent orchestration layer (Lessons 7–9).
+"""Agent orchestration layer (Lessons 7–10).
 
 Fetch → Parse → Classify → Validate → Decide → Execute (via allowlisted tools)
-
-Modes:
-- dry_run: report only
-- approval: propose and require explicit y/N before writes
-- automatic: execute when content guards pass
+Skip message_ids already stored in SQLite memory.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from googleapiclient.discovery import Resource
 
 from app.actions import meets_content_guards, proposed_action
 from app.classifier import classify
 from app.config import GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
+from app.database import DecisionStore
 from app.models import Action, ClassificationResult, EmailMessage
 from app.tools import GmailTools
 
@@ -90,7 +88,7 @@ def ask_approval(
 
 
 class GmailAgent:
-    """Orchestrates the inbox pipeline using allowlisted tools."""
+    """Orchestrates the inbox pipeline using allowlisted tools + SQLite memory."""
 
     def __init__(
         self,
@@ -100,12 +98,16 @@ class GmailAgent:
         max_emails: int | None = None,
         tools: GmailTools | None = None,
         input_fn: Callable[[str], str] = input,
+        store: DecisionStore | None = None,
+        db_path: Path | None = None,
     ) -> None:
         self.service = service
         self.mode = (mode or MODE).strip().lower()
         self.max_emails = MAX_EMAILS_PER_RUN if max_emails is None else max_emails
         self.tools = tools or GmailTools(service=service)
         self.input_fn = input_fn
+        self.store = store or DecisionStore(db_path=db_path)
+        self.skipped_cached = 0
 
     def _sync_tools_service(self) -> GmailTools:
         if self.service is not None:
@@ -115,12 +117,17 @@ class GmailAgent:
         return self.tools
 
     def fetch_emails(self) -> list[EmailMessage]:
-        """Fetch recent emails via tools: get_recent_emails → read_email."""
+        """Fetch recent emails via tools; skip ids already in SQLite."""
         tools = self._sync_tools_service()
         stubs = tools.invoke("get_recent_emails", max_results=self.max_emails)
         emails: list[EmailMessage] = []
+        self.skipped_cached = 0
         for stub in stubs:
-            emails.append(tools.invoke("read_email", message_id=stub["id"]))
+            message_id = stub["id"]
+            if self.store.has_message(message_id):
+                self.skipped_cached += 1
+                continue
+            emails.append(tools.invoke("read_email", message_id=message_id))
         if tools.service is not None:
             self.service = tools.service
         return emails
@@ -133,7 +140,14 @@ class GmailAgent:
 
         service = tools._ensure_service()
         self.service = service
-        return [get_message(service, stub["id"]) for stub in stubs]
+        messages: list[dict] = []
+        self.skipped_cached = 0
+        for stub in stubs:
+            if self.store.has_message(stub["id"]):
+                self.skipped_cached += 1
+                continue
+            messages.append(get_message(service, stub["id"]))
+        return messages
 
     def _perform_label_and_archive(self, email: EmailMessage) -> str:
         tools = self._sync_tools_service()
@@ -168,10 +182,16 @@ class GmailAgent:
         return self._perform_label_and_archive(email)
 
     def process_email(self, email: EmailMessage) -> AgentResult:
-        """Run classify → validate → decide → execute for one parsed email."""
+        """Run classify → validate → decide → execute, then persist memory."""
         decision = validate_decision(classify(email))
         action = decide(decision)
         execution_note = self.execute(email, decision, action)
+        self.store.save_decision(
+            email,
+            decision,
+            action=action.value,
+            execution_note=execution_note,
+        )
         return AgentResult(
             email=email,
             decision=decision,
@@ -186,9 +206,12 @@ class GmailAgent:
         return self.process_email(parse(raw_message))
 
     def run(self) -> list[AgentResult]:
-        """Run the full pipeline over recent emails via tools."""
+        """Run the full pipeline over recent unprocessed emails."""
         results: list[AgentResult] = []
-        for email in self.fetch_emails():
+        emails = self.fetch_emails()
+        if self.skipped_cached:
+            print(f"Skipping {self.skipped_cached} already-processed email(s) from memory.\n")
+        for email in emails:
             results.append(self.process_email(email))
         return results
 
@@ -199,6 +222,8 @@ def run_agent(
     max_emails: int | None = None,
     service: Resource | None = None,
     input_fn: Callable[[str], str] = input,
+    store: DecisionStore | None = None,
+    db_path: Path | None = None,
 ) -> list[AgentResult]:
     """Convenience wrapper used by the CLI."""
     agent = GmailAgent(
@@ -206,5 +231,7 @@ def run_agent(
         mode=mode,
         max_emails=max_emails,
         input_fn=input_fn,
+        store=store,
+        db_path=db_path,
     )
     return agent.run()
