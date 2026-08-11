@@ -32,6 +32,7 @@ def test_print_classification_format(capsys) -> None:
     output = capsys.readouterr().out
 
     assert "[1]" in output
+    assert "Message-ID: 1" in output
     assert "Category: TO_PROCESS" in output
     assert "Action: LABEL_AND_ARCHIVE" in output
     assert "Confidence: 0.99" in output

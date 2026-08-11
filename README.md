@@ -42,11 +42,16 @@ python main.py
 
 ### Lesson 5 — labels
 
+Recommended workflow:
+
 ```bash
-# Create or fetch the "To Process" label
+# 1) Dry-run: classify and print Message-ID values (no Gmail writes)
+python main.py
+
+# 2) Ensure the label exists
 python main.py ensure-label
 
-# Apply label to ONE test message (requires MODE!=dry_run)
+# 3) Apply label to one Message-ID you copied from the dry-run output
 MODE=automatic python main.py apply-label MESSAGE_ID
 ```
 

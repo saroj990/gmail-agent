@@ -32,6 +32,7 @@ def print_classification(
 ) -> None:
     """Print one email, its classification, and execution status."""
     print(f"[{index}]")
+    print(f"Message-ID: {email.message_id}")
     print(f"From: {email.sender}")
     print(f"Subject: {email.subject}")
     print()
