@@ -28,13 +28,14 @@ def test_print_classification_format(capsys) -> None:
         action=Action.LABEL_AND_ARCHIVE,
     )
 
-    print_classification(1, email, decision)
+    print_classification(1, email, decision, "skipped (dry_run): LABEL_AND_ARCHIVE")
     output = capsys.readouterr().out
 
     assert "[1]" in output
     assert "Category: TO_PROCESS" in output
     assert "Action: LABEL_AND_ARCHIVE" in output
     assert "Confidence: 0.99" in output
+    assert "Execution: skipped (dry_run): LABEL_AND_ARCHIVE" in output
 
 
 def test_fetch_recent_emails_parses_messages() -> None:

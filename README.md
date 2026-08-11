@@ -1,6 +1,6 @@
 # Gmail AI Inbox Agent
 
-Local-first Gmail inbox agent. Currently **read-only**: OAuth + parse + classify (no Gmail writes).
+Local-first Gmail inbox agent. Currently **dry-run**: OAuth + parse + classify (no Gmail writes).
 
 ## Setup
 
@@ -41,7 +41,8 @@ Optional: `ollama pull qwen2.5:7b` if you prefer Qwen.
 python main.py
 ```
 
-Fetches recent emails, parses them, classifies with Ollama, and prints decisions. Inbox is not modified.
+Fetches recent emails, parses them, classifies with Ollama, and prints decisions.
+Default `MODE=dry_run` — inbox is never modified.
 
 ### Tests
 
@@ -55,7 +56,8 @@ pytest
 |--------|--------|
 | 1 Gmail API (readonly OAuth) | Done |
 | 2 Email parser (Pydantic) | Done |
-| 3 AI classification (Ollama/Qwen) | Done |
+| 3 AI classification (Ollama) | Done |
+| 4 Dry-run mode | Done |
 
 ## Safety
 
