@@ -50,7 +50,14 @@ For each high-confidence `TO_PROCESS` email:
 
 Permanent delete is not offered.
 
-### Labels + archive (manual one-email test)
+### Run via agent (Lesson 7)
+
+```bash
+python main.py
+```
+
+Orchestration lives in `app/agent.py`:
+Fetch → Parse → Classify → Validate → Decide → Execute
 
 ```bash
 # 1) Dry-run and copy a Message-ID
@@ -88,6 +95,7 @@ pytest
 | 4 Dry-run mode | Done |
 | 5 Gmail labels | Done |
 | 6 Archive | Done |
+| 7 Agent layer | Done |
 
 ## Safety
 

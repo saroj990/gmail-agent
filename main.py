@@ -1,42 +1,28 @@
-"""Entrypoint: classify pipeline + label/archive helpers."""
+"""Entrypoint: CLI over the Lesson 7 agent + helpers."""
 
 from __future__ import annotations
 
 import argparse
 
-from app.actions import (
-    apply_to_process_label,
-    execute_decision,
-    gmail_writes_allowed,
-    label_and_archive,
-)
-from app.classifier import ClassifierError, classify
+from app.actions import apply_to_process_label, gmail_writes_allowed, label_and_archive
+from app.agent import AgentResult, GmailAgent, run_agent
+from app.classifier import ClassifierError
 from app.config import CONFIDENCE_THRESHOLD, GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
-from app.gmail import GmailAuthError, archive_message, ensure_label, get_message, get_service, list_messages
-from app.models import ClassificationResult, EmailMessage
+from app.gmail import GmailAuthError, archive_message, ensure_label, get_service
+from app.models import EmailMessage
 from app.parser import parse
 from app.review import run_review
 
 
 def fetch_recent_emails(max_results: int = MAX_EMAILS_PER_RUN) -> list[EmailMessage]:
-    """Authenticate, fetch recent messages, and return parsed EmailMessage models."""
-    service = get_service()
-    stubs = list_messages(service, max_results=max_results)
-
-    emails: list[EmailMessage] = []
-    for stub in stubs:
-        raw = get_message(service, stub["id"])
-        emails.append(parse(raw))
-    return emails
+    """Fetch and parse recent emails (no classify/execute)."""
+    agent = GmailAgent(max_emails=max_results)
+    return [parse(raw) for raw in agent.fetch_raw_messages()]
 
 
-def print_classification(
-    index: int,
-    email: EmailMessage,
-    decision: ClassificationResult,
-    execution_note: str,
-) -> None:
-    """Print one email, its classification, and execution status."""
+def print_classification(index: int, result: AgentResult) -> None:
+    """Print one agent result."""
+    email, decision = result.email, result.decision
     print(f"[{index}]")
     print(f"Message-ID: {email.message_id}")
     print(f"From: {email.sender}")
@@ -45,9 +31,9 @@ def print_classification(
     print(f"Category: {decision.category.value}")
     print(f"Importance: {decision.importance.value}")
     print(f"Confidence: {decision.confidence:.2f}")
-    print(f"Action: {decision.action.value}")
+    print(f"Action: {result.action.value}")
     print(f"Reason: {decision.reason}")
-    print(f"Execution: {execution_note}")
+    print(f"Execution: {result.execution_note}")
     print()
 
 
@@ -58,29 +44,17 @@ def run_pipeline() -> None:
         print("Dry run enabled — classifications only; Gmail will not be modified.\n")
 
     try:
-        service = get_service()
-        stubs = list_messages(service, max_results=MAX_EMAILS_PER_RUN)
-        emails: list[EmailMessage] = []
-        for stub in stubs:
-            emails.append(parse(get_message(service, stub["id"])))
+        results = run_agent()
     except GmailAuthError as exc:
         print(f"Authentication error: {exc}")
         raise SystemExit(1) from exc
-
-    print(f"Analyzing {len(emails)} emails...\n")
-
-    try:
-        for index, (stub, email) in enumerate(zip(stubs, emails, strict=True), start=1):
-            decision = classify(email)
-            execution_note = execute_decision(
-                decision,
-                service=service,
-                message_id=stub["id"],
-            )
-            print_classification(index, email, decision, execution_note)
     except ClassifierError as exc:
         print(f"Classifier error: {exc}")
         raise SystemExit(1) from exc
+
+    print(f"Analyzing {len(results)} emails...\n")
+    for index, result in enumerate(results, start=1):
+        print_classification(index, result)
 
 
 def cmd_ensure_label() -> None:
