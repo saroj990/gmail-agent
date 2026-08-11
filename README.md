@@ -59,6 +59,9 @@ python main.py
 Orchestration lives in `app/agent.py`:
 Fetch → Parse → Classify → Validate → Decide → Execute
 
+Gmail mutations go only through allowlisted tools in `app/tools.py`:
+`get_recent_emails`, `read_email`, `apply_label`, `archive_email`.
+
 ```bash
 # 1) Dry-run and copy a Message-ID
 python main.py
@@ -96,6 +99,7 @@ pytest
 | 5 Gmail labels | Done |
 | 6 Archive | Done |
 | 7 Agent layer | Done |
+| 8 Tool-based agent | Done |
 
 ## Safety
 

@@ -1,6 +1,6 @@
-"""Agent orchestration layer (Lesson 7).
+"""Agent orchestration layer (Lessons 7–8).
 
-Fetch → Parse → Classify → Validate → Decide → Execute
+Fetch → Parse → Classify → Validate → Decide → Execute (via allowlisted tools)
 
 Gmail API, parsing, classification, and actions stay in separate modules.
 No LangChain / LangGraph.
@@ -12,12 +12,11 @@ from dataclasses import dataclass
 
 from googleapiclient.discovery import Resource
 
-from app.actions import execute_decision, proposed_action
+from app.actions import gmail_writes_allowed, meets_archive_guards, proposed_action
 from app.classifier import classify
 from app.config import MAX_EMAILS_PER_RUN, MODE
-from app.gmail import get_message, get_service, list_messages
 from app.models import Action, ClassificationResult, EmailMessage
-from app.parser import parse
+from app.tools import GmailTools, ToolError
 
 ALLOWED_ACTIONS = frozenset(
     {
@@ -61,7 +60,7 @@ def decide(decision: ClassificationResult) -> Action:
 
 
 class GmailAgent:
-    """Orchestrates the inbox pipeline using existing modules."""
+    """Orchestrates the inbox pipeline using allowlisted tools."""
 
     def __init__(
         self,
@@ -69,33 +68,69 @@ class GmailAgent:
         *,
         mode: str | None = None,
         max_emails: int | None = None,
+        tools: GmailTools | None = None,
     ) -> None:
         self.service = service
         self.mode = mode or MODE
         self.max_emails = MAX_EMAILS_PER_RUN if max_emails is None else max_emails
+        self.tools = tools or GmailTools(service=service)
 
-    def _ensure_service(self) -> Resource:
-        if self.service is None:
-            self.service = get_service()
-        return self.service
+    def _sync_tools_service(self) -> GmailTools:
+        if self.service is not None:
+            self.tools.service = self.service
+        elif self.tools.service is not None:
+            self.service = self.tools.service
+        return self.tools
+
+    def fetch_emails(self) -> list[EmailMessage]:
+        """Fetch recent emails via tools: get_recent_emails → read_email."""
+        tools = self._sync_tools_service()
+        stubs = tools.invoke("get_recent_emails", max_results=self.max_emails)
+        emails: list[EmailMessage] = []
+        for stub in stubs:
+            emails.append(tools.invoke("read_email", message_id=stub["id"]))
+        if tools.service is not None:
+            self.service = tools.service
+        return emails
 
     def fetch_raw_messages(self) -> list[dict]:
-        """Fetch recent raw Gmail message dicts."""
-        service = self._ensure_service()
-        stubs = list_messages(service, max_results=self.max_emails)
+        """Compatibility helper used by older CLI helpers."""
+        tools = self._sync_tools_service()
+        stubs = tools.invoke("get_recent_emails", max_results=self.max_emails)
+        from app.gmail import get_message
+
+        service = tools._ensure_service()
+        self.service = service
         return [get_message(service, stub["id"]) for stub in stubs]
 
-    def process_email(self, raw_message: dict) -> AgentResult:
-        """Run parse → classify → validate → decide → execute for one email."""
-        email = parse(raw_message)
+    def execute(self, email: EmailMessage, decision: ClassificationResult, action: Action) -> str:
+        """Execute an allowlisted action using tools only (no invented Gmail ops)."""
+        if action not in ALLOWED_ACTIONS:
+            raise AgentError(f"Action not allowlisted: {action.value}")
+
+        if not gmail_writes_allowed(self.mode):
+            return f"skipped ({self.mode}): {action.value}"
+
+        if action in {Action.LEAVE_IN_INBOX, Action.NO_ACTION}:
+            return f"no write: {action.value}"
+
+        if action == Action.LABEL_AND_ARCHIVE:
+            allowed, reason = meets_archive_guards(decision, mode=self.mode)
+            if not allowed:
+                return f"skipped ({reason}): {action.value}"
+
+            tools = self._sync_tools_service()
+            label_name = tools.invoke("apply_label", message_id=email.message_id)
+            tools.invoke("archive_email", message_id=email.message_id)
+            return f"labeled '{label_name}' and archived"
+
+        raise AgentError(f"Unsupported action: {action.value}")
+
+    def process_email(self, email: EmailMessage) -> AgentResult:
+        """Run classify → validate → decide → execute for one parsed email."""
         decision = validate_decision(classify(email))
         action = decide(decision)
-        execution_note = execute_decision(
-            decision,
-            mode=self.mode,
-            service=self._ensure_service(),
-            message_id=email.message_id,
-        )
+        execution_note = self.execute(email, decision, action)
         return AgentResult(
             email=email,
             decision=decision,
@@ -103,11 +138,17 @@ class GmailAgent:
             execution_note=execution_note,
         )
 
+    def process_raw_email(self, raw_message: dict) -> AgentResult:
+        """Parse a raw Gmail dict then process it (test helper)."""
+        from app.parser import parse
+
+        return self.process_email(parse(raw_message))
+
     def run(self) -> list[AgentResult]:
-        """Run the full pipeline over recent emails."""
+        """Run the full pipeline over recent emails via tools."""
         results: list[AgentResult] = []
-        for raw in self.fetch_raw_messages():
-            results.append(self.process_email(raw))
+        for email in self.fetch_emails():
+            results.append(self.process_email(email))
         return results
 
 

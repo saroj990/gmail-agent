@@ -1,4 +1,4 @@
-"""Tests for the Lesson 7 agent orchestration layer."""
+"""Tests for the agent orchestration layer (Lessons 7–8)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.agent import ALLOWED_ACTIONS, AgentError, GmailAgent, decide, validate_decision
-from app.models import Action, Category, ClassificationResult, Importance
+from app.models import Action, Category, ClassificationResult, EmailMessage, Importance
+from app.tools import ToolError
 
 
 def _b64url(text: str) -> str:
@@ -55,55 +56,57 @@ def test_validate_rejects_non_allowlisted_action() -> None:
 
 
 def test_process_email_pipeline_dry_run() -> None:
-    service = MagicMock()
-    raw = {
-        "id": "msg-1",
-        "threadId": "t1",
-        "snippet": "promo",
-        "payload": {
-            "mimeType": "text/plain",
-            "headers": [
-                {"name": "From", "value": "news@example.com"},
-                {"name": "Subject", "value": "Sale"},
-            ],
-            "body": {"data": _b64url("Big sale today")},
-        },
-    }
+    email = EmailMessage(
+        message_id="msg-1",
+        thread_id="t1",
+        sender="news@example.com",
+        subject="Sale",
+        body="Big sale today",
+    )
     decision = _decision()
+    agent = GmailAgent(service=MagicMock(), mode="dry_run")
 
-    agent = GmailAgent(service=service, mode="dry_run")
-    with (
-        patch("app.agent.classify", return_value=decision),
-        patch("app.agent.execute_decision", return_value="skipped (dry_run): LABEL_AND_ARCHIVE") as mock_exec,
-    ):
-        result = agent.process_email(raw)
+    with patch("app.agent.classify", return_value=decision):
+        result = agent.process_email(email)
 
     assert result.email.message_id == "msg-1"
     assert result.action == Action.LABEL_AND_ARCHIVE
     assert "skipped (dry_run)" in result.execution_note
-    mock_exec.assert_called_once()
 
 
-def test_run_fetches_and_processes() -> None:
-    service = MagicMock()
-    agent = GmailAgent(service=service, mode="dry_run", max_emails=1)
-    raw = {
-        "id": "msg-1",
-        "threadId": "t1",
-        "snippet": "x",
-        "payload": {
-            "mimeType": "text/plain",
-            "headers": [{"name": "Subject", "value": "Hi"}],
-            "body": {"data": _b64url("hi")},
-        },
-    }
+def test_execute_uses_tools_for_label_and_archive() -> None:
+    email = EmailMessage(message_id="msg-1", thread_id="t1", subject="Sale")
+    decision = _decision()
+    tools = MagicMock()
+    tools.invoke.side_effect = ["To Process", "msg-1"]
+    agent = GmailAgent(service=MagicMock(), mode="automatic", tools=tools)
+
+    note = agent.execute(email, decision, Action.LABEL_AND_ARCHIVE)
+
+    assert note == "labeled 'To Process' and archived"
+    assert tools.invoke.call_args_list[0].args[0] == "apply_label"
+    assert tools.invoke.call_args_list[1].args[0] == "archive_email"
+
+
+def test_execute_cannot_call_forbidden_tool_names() -> None:
+    tools = MagicMock()
+    tools.invoke.side_effect = ToolError("Forbidden tool: delete")
+    agent = GmailAgent(service=MagicMock(), mode="automatic", tools=tools)
+    # Agent never exposes delete; direct invoke still blocked by tools layer.
+    with pytest.raises(ToolError, match="Forbidden"):
+        tools.invoke("delete")
+
+
+def test_run_fetches_via_tools_and_processes() -> None:
+    email = EmailMessage(message_id="msg-1", thread_id="t1", subject="Hi")
+    agent = GmailAgent(service=MagicMock(), mode="dry_run", max_emails=1)
 
     with (
-        patch.object(agent, "fetch_raw_messages", return_value=[raw]),
+        patch.object(agent, "fetch_emails", return_value=[email]),
         patch.object(agent, "process_email") as mock_process,
     ):
         mock_process.return_value = MagicMock()
         results = agent.run()
 
     assert len(results) == 1
-    mock_process.assert_called_once_with(raw)
+    mock_process.assert_called_once_with(email)

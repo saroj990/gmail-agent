@@ -10,14 +10,13 @@ from app.classifier import ClassifierError
 from app.config import CONFIDENCE_THRESHOLD, GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
 from app.gmail import GmailAuthError, archive_message, ensure_label, get_service
 from app.models import EmailMessage
-from app.parser import parse
 from app.review import run_review
 
 
 def fetch_recent_emails(max_results: int = MAX_EMAILS_PER_RUN) -> list[EmailMessage]:
-    """Fetch and parse recent emails (no classify/execute)."""
+    """Fetch and parse recent emails via allowlisted tools (no classify/execute)."""
     agent = GmailAgent(max_emails=max_results)
-    return [parse(raw) for raw in agent.fetch_raw_messages()]
+    return agent.fetch_emails()
 
 
 def print_classification(index: int, result: AgentResult) -> None:

@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 from unittest.mock import MagicMock, patch
 
 from app.agent import AgentResult
 from app.models import Action, Category, ClassificationResult, EmailMessage, Importance
 from main import fetch_recent_emails, print_classification
-
-
-def _b64url(text: str) -> str:
-    return base64.urlsafe_b64encode(text.encode("utf-8")).decode("ascii").rstrip("=")
 
 
 def test_print_classification_format(capsys) -> None:
@@ -44,29 +39,22 @@ def test_print_classification_format(capsys) -> None:
     assert "Execution: skipped (dry_run): LABEL_AND_ARCHIVE" in output
 
 
-def test_fetch_recent_emails_parses_messages() -> None:
-    raw = {
-        "id": "msg-1",
-        "threadId": "t1",
-        "snippet": "Hello",
-        "payload": {
-            "mimeType": "text/plain",
-            "headers": [
-                {"name": "From", "value": "a@example.com"},
-                {"name": "To", "value": "me@gmail.com"},
-                {"name": "Subject", "value": "Hi"},
-                {"name": "Date", "value": "today"},
-            ],
-            "body": {"data": _b64url("Hello body")},
-        },
-    }
+def test_fetch_recent_emails_uses_agent_tools() -> None:
+    email = EmailMessage(
+        message_id="msg-1",
+        thread_id="t1",
+        sender="a@example.com",
+        subject="Hi",
+        body="Hello body",
+    )
 
     with patch("main.GmailAgent") as mock_agent_cls:
         instance = MagicMock()
-        instance.fetch_raw_messages.return_value = [raw]
+        instance.fetch_emails.return_value = [email]
         mock_agent_cls.return_value = instance
         emails = fetch_recent_emails(max_results=5)
 
     assert len(emails) == 1
     assert emails[0].sender == "a@example.com"
     assert emails[0].body == "Hello body"
+    instance.fetch_emails.assert_called_once()
