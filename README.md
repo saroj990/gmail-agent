@@ -33,22 +33,23 @@ GMAIL_LABEL=To Process
 CONFIDENCE_THRESHOLD=0.95
 ```
 
-### Interactive review (recommended)
+### Modes (Lesson 9)
 
-Always dry-runs first, prints a summary, then asks before changing Gmail:
+| MODE | Behavior |
+|------|----------|
+| `dry_run` (default) | Classify/report only |
+| `approval` | Ask `Approve? [y/N]` before each label+archive |
+| `automatic` | Label+archive when confidence guards pass |
+
+```bash
+MODE=approval python main.py
+```
+
+Richer interactive options (archive/trash/skip) remain available via:
 
 ```bash
 python main.py review
 ```
-
-For each high-confidence `TO_PROCESS` email:
-
-- `a` = label **To Process** + archive
-- `t` = move to **Trash** (recoverable; type `trash` to confirm)
-- `s` = skip
-- `q` = quit
-
-Permanent delete is not offered.
 
 ### Run via agent (Lesson 7)
 
@@ -100,6 +101,7 @@ pytest
 | 6 Archive | Done |
 | 7 Agent layer | Done |
 | 8 Tool-based agent | Done |
+| 9 Human-in-the-loop | Done |
 
 ## Safety
 

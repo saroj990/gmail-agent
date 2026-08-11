@@ -12,6 +12,7 @@ from app.actions import (
     gmail_writes_allowed,
     label_and_archive,
     meets_archive_guards,
+    meets_content_guards,
     proposed_action,
 )
 from app.models import Action, Category, ClassificationResult, Importance
@@ -39,6 +40,14 @@ def test_gmail_writes_not_allowed_in_dry_run() -> None:
 def test_gmail_writes_allowed_in_later_modes() -> None:
     assert gmail_writes_allowed("approval") is True
     assert gmail_writes_allowed("automatic") is True
+
+
+def test_meets_content_guards_ignores_mode() -> None:
+    ok, _ = meets_content_guards(_decision(confidence=0.99), threshold=0.95)
+    assert ok is True
+    ok, reason = meets_content_guards(_decision(confidence=0.5), threshold=0.95)
+    assert ok is False
+    assert "confidence" in reason
 
 
 def test_meets_archive_guards_requires_to_process_and_confidence() -> None:

@@ -20,18 +20,13 @@ def proposed_action(decision: ClassificationResult) -> Action:
     return decision.action
 
 
-def meets_archive_guards(
+def meets_content_guards(
     decision: ClassificationResult,
     *,
-    mode: str | None = None,
     threshold: float | None = None,
 ) -> tuple[bool, str]:
-    """Return whether label+archive is allowed, plus a reason string."""
-    current_mode = mode or MODE
+    """Check category/confidence only (mode handled separately by the agent)."""
     min_confidence = CONFIDENCE_THRESHOLD if threshold is None else threshold
-
-    if not gmail_writes_allowed(current_mode):
-        return False, f"mode is {current_mode}"
 
     if decision.category != Category.TO_PROCESS:
         return False, f"category is {decision.category.value}"
@@ -40,6 +35,21 @@ def meets_archive_guards(
         return False, f"confidence {decision.confidence:.2f} < {min_confidence:.2f}"
 
     return True, "ok"
+
+
+def meets_archive_guards(
+    decision: ClassificationResult,
+    *,
+    mode: str | None = None,
+    threshold: float | None = None,
+) -> tuple[bool, str]:
+    """Return whether label+archive is allowed, plus a reason string."""
+    current_mode = mode or MODE
+
+    if not gmail_writes_allowed(current_mode):
+        return False, f"mode is {current_mode}"
+
+    return meets_content_guards(decision, threshold=threshold)
 
 
 def apply_to_process_label(

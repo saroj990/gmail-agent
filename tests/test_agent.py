@@ -1,19 +1,22 @@
-"""Tests for the agent orchestration layer (Lessons 7–8)."""
+"""Tests for the agent orchestration layer (Lessons 7–9)."""
 
 from __future__ import annotations
 
-import base64
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.agent import ALLOWED_ACTIONS, AgentError, GmailAgent, decide, validate_decision
+from app.agent import (
+    ALLOWED_ACTIONS,
+    AgentError,
+    GmailAgent,
+    ask_approval,
+    decide,
+    format_proposal,
+    validate_decision,
+)
 from app.models import Action, Category, ClassificationResult, EmailMessage, Importance
 from app.tools import ToolError
-
-
-def _b64url(text: str) -> str:
-    return base64.urlsafe_b64encode(text.encode("utf-8")).decode("ascii").rstrip("=")
 
 
 def _decision(
@@ -74,7 +77,7 @@ def test_process_email_pipeline_dry_run() -> None:
     assert "skipped (dry_run)" in result.execution_note
 
 
-def test_execute_uses_tools_for_label_and_archive() -> None:
+def test_execute_uses_tools_for_label_and_archive_automatic() -> None:
     email = EmailMessage(message_id="msg-1", thread_id="t1", subject="Sale")
     decision = _decision()
     tools = MagicMock()
@@ -88,11 +91,74 @@ def test_execute_uses_tools_for_label_and_archive() -> None:
     assert tools.invoke.call_args_list[1].args[0] == "archive_email"
 
 
+def test_approval_mode_executes_only_when_user_says_yes() -> None:
+    email = EmailMessage(
+        message_id="msg-1",
+        thread_id="t1",
+        sender="LinkedIn <x@linkedin.com>",
+        subject="Someone viewed your profile",
+    )
+    decision = _decision()
+    tools = MagicMock()
+    tools.invoke.side_effect = ["To Process", "msg-1"]
+    agent = GmailAgent(
+        service=MagicMock(),
+        mode="approval",
+        tools=tools,
+        input_fn=lambda _prompt: "y",
+    )
+
+    note = agent.execute(email, decision, Action.LABEL_AND_ARCHIVE)
+    assert note == "labeled 'To Process' and archived"
+    assert tools.invoke.call_count == 2
+
+
+def test_approval_mode_declined_leaves_gmail_unchanged() -> None:
+    email = EmailMessage(
+        message_id="msg-1",
+        thread_id="t1",
+        sender="LinkedIn <x@linkedin.com>",
+        subject="Someone viewed your profile",
+    )
+    decision = _decision()
+    tools = MagicMock()
+    agent = GmailAgent(
+        service=MagicMock(),
+        mode="approval",
+        tools=tools,
+        input_fn=lambda _prompt: "n",
+    )
+
+    note = agent.execute(email, decision, Action.LABEL_AND_ARCHIVE)
+    assert note == "declined by user: LABEL_AND_ARCHIVE"
+    tools.invoke.assert_not_called()
+
+
+def test_ask_approval_defaults_to_no() -> None:
+    email = EmailMessage(message_id="1", thread_id="t", sender="a", subject="b")
+    decision = _decision()
+    assert ask_approval(email, decision, Action.LABEL_AND_ARCHIVE, input_fn=lambda _: "") is False
+    assert ask_approval(email, decision, Action.LABEL_AND_ARCHIVE, input_fn=lambda _: "y") is True
+
+
+def test_format_proposal_matches_lesson_shape() -> None:
+    email = EmailMessage(
+        message_id="1",
+        thread_id="t",
+        sender="LinkedIn",
+        subject="15 people viewed your profile",
+    )
+    text = format_proposal(email, _decision(), Action.LABEL_AND_ARCHIVE)
+    assert "Email:" in text
+    assert "AI Decision:" in text
+    assert "TO_PROCESS" in text
+    assert "Proposed action:" in text
+    assert "archive" in text.lower()
+
+
 def test_execute_cannot_call_forbidden_tool_names() -> None:
     tools = MagicMock()
     tools.invoke.side_effect = ToolError("Forbidden tool: delete")
-    agent = GmailAgent(service=MagicMock(), mode="automatic", tools=tools)
-    # Agent never exposes delete; direct invoke still blocked by tools layer.
     with pytest.raises(ToolError, match="Forbidden"):
         tools.invoke("delete")
 

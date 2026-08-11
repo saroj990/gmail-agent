@@ -41,6 +41,10 @@ def run_pipeline() -> None:
     print(f"CONFIDENCE_THRESHOLD={CONFIDENCE_THRESHOLD}")
     if MODE == "dry_run":
         print("Dry run enabled — classifications only; Gmail will not be modified.\n")
+    elif MODE == "approval":
+        print("Approval mode — you will be asked [y/N] before each archive.\n")
+    elif MODE == "automatic":
+        print("Automatic mode — high-confidence TO_PROCESS mail may be labeled/archived.\n")
 
     try:
         results = run_agent()
