@@ -102,6 +102,7 @@ def test_get_service_builds_client_with_valid_token(tmp_path) -> None:
 
     fake_creds = MagicMock()
     fake_creds.valid = True
+    fake_creds.scopes = ["https://www.googleapis.com/auth/gmail.modify"]
 
     with (
         patch("app.gmail.Credentials.from_authorized_user_file", return_value=fake_creds),

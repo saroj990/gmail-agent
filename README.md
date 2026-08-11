@@ -1,6 +1,6 @@
 # Gmail AI Inbox Agent
 
-Local-first Gmail inbox agent. Currently **dry-run**: OAuth + parse + classify (no Gmail writes).
+Local-first Gmail inbox agent. Default mode is **dry-run** (classify only). Lesson 5 adds label helpers.
 
 ## Setup
 
@@ -16,33 +16,41 @@ pip install -r requirements.txt
 2. Save as `credentials.json` in the project root.
 3. Add yourself as an OAuth test user.
 
-### Ollama (Lesson 3)
-
-You need any local chat model. Example with a model you already have:
+Lesson 5 uses `gmail.modify` (labels; no permanent delete). If you previously authorized readonly only:
 
 ```bash
-ollama list
-# if the daemon isn't running:
-ollama serve
+rm token.json
+python main.py ensure-label
 ```
 
-Set the model in `.env`:
+Re-consent in the browser when prompted.
+
+### Ollama
 
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1:8b
+MODE=dry_run
+GMAIL_LABEL=To Process
 ```
 
-Optional: `ollama pull qwen2.5:7b` if you prefer Qwen.
-
-### Run
+### Run (dry-run classify)
 
 ```bash
 python main.py
 ```
 
-Fetches recent emails, parses them, classifies with Ollama, and prints decisions.
-Default `MODE=dry_run` — inbox is never modified.
+### Lesson 5 — labels
+
+```bash
+# Create or fetch the "To Process" label
+python main.py ensure-label
+
+# Apply label to ONE test message (requires MODE!=dry_run)
+MODE=automatic python main.py apply-label MESSAGE_ID
+```
+
+Does **not** archive yet (Lesson 6).
 
 ### Tests
 
@@ -58,10 +66,11 @@ pytest
 | 2 Email parser (Pydantic) | Done |
 | 3 AI classification (Ollama) | Done |
 | 4 Dry-run mode | Done |
+| 5 Gmail labels | Done |
 
 ## Safety
 
-- Scope: `gmail.readonly`
-- Classifier never returns DELETE / MOVE_TO_SPAM
-- Invalid model output → UNKNOWN / NO_ACTION
+- Default `MODE=dry_run` never writes
+- Label apply requires `approval` or `automatic`
+- No archive/delete in Lesson 5
 - Never commit `credentials.json`, `token.json`, or `.env`
