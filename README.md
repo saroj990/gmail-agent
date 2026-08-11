@@ -18,17 +18,22 @@ pip install -r requirements.txt
 
 ### Ollama (Lesson 3)
 
+You need any local chat model. Example with a model you already have:
+
 ```bash
-# Install Ollama, then:
-ollama pull qwen2.5:7b
+ollama list
+# if the daemon isn't running:
+ollama serve
 ```
 
-Optional `.env` (see `.env.example`):
+Set the model in `.env`:
 
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=llama3.1:8b
 ```
+
+Optional: `ollama pull qwen2.5:7b` if you prefer Qwen.
 
 ### Run
 
