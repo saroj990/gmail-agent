@@ -1,7 +1,3 @@
-# Private build guide / lesson docs (local only)
-docs/
-gmail-ai-agent-cursor-guide.md
-
 # Secrets & credentials
 credentials.json
 token.json

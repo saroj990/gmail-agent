@@ -2,6 +2,8 @@
 
 Local-first Gmail inbox agent. Default mode is **dry-run** (classify only).
 
+**Docs:** [docs/README.md](docs/README.md) · [Implementation plan](docs/IMPLEMENTATION_PLAN.md) · [Overview](docs/overview.md)
+
 ## Setup
 
 ```bash
@@ -31,9 +33,10 @@ OLLAMA_MODEL=llama3.1:8b
 MODE=dry_run
 GMAIL_LABEL=To Process
 CONFIDENCE_THRESHOLD=0.95
+DATABASE_PATH=data/decisions.db
 ```
 
-### Modes (Lesson 9)
+### Modes ([Lesson 9](docs/lessons/09-human-in-the-loop.md))
 
 | MODE | Behavior |
 |------|----------|
@@ -45,13 +48,13 @@ CONFIDENCE_THRESHOLD=0.95
 MODE=approval python main.py
 ```
 
-Richer interactive options (archive/trash/skip) remain available via:
+Richer interactive options (archive/trash/skip):
 
 ```bash
 python main.py review
 ```
 
-### Run via agent (Lesson 7)
+### Run via agent ([Lesson 7](docs/lessons/07-agent-layer.md))
 
 ```bash
 python main.py
@@ -60,10 +63,11 @@ python main.py
 Orchestration lives in `app/agent.py`:
 Fetch → Parse → Classify → Validate → Decide → Execute
 
-Gmail mutations go only through allowlisted tools in `app/tools.py`:
+Gmail mutations go only through allowlisted tools in `app/tools.py`
+([Lesson 8](docs/lessons/08-tool-based-agent.md)):
 `get_recent_emails`, `read_email`, `apply_label`, `archive_email`.
 
-### Memory (Lesson 10)
+### Memory ([Lesson 10](docs/lessons/10-sqlite-memory.md))
 
 Processed `message_id`s are stored in `data/decisions.db` (gitignored).
 Re-runs skip emails already in that database.
@@ -94,20 +98,22 @@ Pipeline auto label+archive only when:
 pytest
 ```
 
-## Lessons so far
+## Lessons
 
-| Lesson | Status |
-|--------|--------|
-| 1 Gmail API (readonly OAuth) | Done |
-| 2 Email parser (Pydantic) | Done |
-| 3 AI classification (Ollama) | Done |
-| 4 Dry-run mode | Done |
-| 5 Gmail labels | Done |
-| 6 Archive | Done |
-| 7 Agent layer | Done |
-| 8 Tool-based agent | Done |
-| 9 Human-in-the-loop | Done |
-| 10 SQLite memory | Done |
+| Lesson | Status | Guide |
+|--------|--------|-------|
+| 1 Gmail API | Done | [docs/lessons/01-gmail-api.md](docs/lessons/01-gmail-api.md) |
+| 2 Email parser | Done | [docs/lessons/02-email-parser.md](docs/lessons/02-email-parser.md) |
+| 3 AI classification | Done | [docs/lessons/03-ai-classification.md](docs/lessons/03-ai-classification.md) |
+| 4 Dry-run mode | Done | [docs/lessons/04-dry-run.md](docs/lessons/04-dry-run.md) |
+| 5 Gmail labels | Done | [docs/lessons/05-gmail-labels.md](docs/lessons/05-gmail-labels.md) |
+| 6 Archive | Done | [docs/lessons/06-archive.md](docs/lessons/06-archive.md) |
+| 7 Agent layer | Done | [docs/lessons/07-agent-layer.md](docs/lessons/07-agent-layer.md) |
+| 8 Tool-based agent | Done | [docs/lessons/08-tool-based-agent.md](docs/lessons/08-tool-based-agent.md) |
+| 9 Human-in-the-loop | Done | [docs/lessons/09-human-in-the-loop.md](docs/lessons/09-human-in-the-loop.md) |
+| 10 SQLite memory | Done | [docs/lessons/10-sqlite-memory.md](docs/lessons/10-sqlite-memory.md) |
+
+More docs: [docs/](docs/README.md) · [MVP checklist](docs/mvp-checklist.md) · [Guardrails](docs/advanced/guardrails.md) · [Future](docs/advanced/future.md)
 
 ## Safety
 
