@@ -1,0 +1,41 @@
+# Private build guide / lesson docs (local only)
+docs/
+gmail-ai-agent-cursor-guide.md
+
+# Secrets & credentials
+credentials.json
+token.json
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local data
+*.db
+*.sqlite
+*.sqlite3
+data/
