@@ -1,6 +1,6 @@
 # Gmail AI Inbox Agent
 
-Local-first Gmail inbox agent. Default mode is **dry-run** (classify only). Lesson 5 adds label helpers.
+Local-first Gmail inbox agent. Default mode is **dry-run** (classify only).
 
 ## Setup
 
@@ -16,22 +16,21 @@ pip install -r requirements.txt
 2. Save as `credentials.json` in the project root.
 3. Add yourself as an OAuth test user.
 
-Lesson 5 uses `gmail.modify` (labels; no permanent delete). If you previously authorized readonly only:
+Uses `gmail.modify` (labels/archive; no permanent delete). If upgrading from readonly:
 
 ```bash
 rm token.json
 python main.py ensure-label
 ```
 
-Re-consent in the browser when prompted.
-
-### Ollama
+### Ollama / config
 
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1:8b
 MODE=dry_run
 GMAIL_LABEL=To Process
+CONFIDENCE_THRESHOLD=0.95
 ```
 
 ### Run (dry-run classify)
@@ -40,22 +39,27 @@ GMAIL_LABEL=To Process
 python main.py
 ```
 
-### Lesson 5 — labels
-
-Recommended workflow:
+### Labels + archive (manual one-email test)
 
 ```bash
-# 1) Dry-run: classify and print Message-ID values (no Gmail writes)
+# 1) Dry-run and copy a Message-ID
 python main.py
 
-# 2) Ensure the label exists
+# 2) Ensure label exists
 python main.py ensure-label
 
-# 3) Apply label to one Message-ID you copied from the dry-run output
+# 3a) Label only
 MODE=automatic python main.py apply-label MESSAGE_ID
+
+# 3b) Label + archive (removes INBOX)
+MODE=automatic python main.py label-and-archive MESSAGE_ID
+
+# 3c) Archive only
+MODE=automatic python main.py archive MESSAGE_ID
 ```
 
-Does **not** archive yet (Lesson 6).
+Pipeline auto label+archive only when:
+`MODE != dry_run` AND category `TO_PROCESS` AND confidence ≥ threshold.
 
 ### Tests
 
@@ -72,10 +76,12 @@ pytest
 | 3 AI classification (Ollama) | Done |
 | 4 Dry-run mode | Done |
 | 5 Gmail labels | Done |
+| 6 Archive | Done |
 
 ## Safety
 
 - Default `MODE=dry_run` never writes
-- Label apply requires `approval` or `automatic`
-- No archive/delete in Lesson 5
+- Writes require `approval` or `automatic`
+- Archive requires TO_PROCESS + confidence ≥ threshold
+- Never permanent delete
 - Never commit `credentials.json`, `token.json`, or `.env`

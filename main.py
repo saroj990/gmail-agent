@@ -1,13 +1,18 @@
-"""Entrypoint: classify pipeline + Lesson 5 label helpers."""
+"""Entrypoint: classify pipeline + label/archive helpers."""
 
 from __future__ import annotations
 
 import argparse
 
-from app.actions import apply_to_process_label, execute_decision, gmail_writes_allowed
+from app.actions import (
+    apply_to_process_label,
+    execute_decision,
+    gmail_writes_allowed,
+    label_and_archive,
+)
 from app.classifier import ClassifierError, classify
-from app.config import GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
-from app.gmail import GmailAuthError, get_message, get_service, list_messages
+from app.config import CONFIDENCE_THRESHOLD, GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
+from app.gmail import GmailAuthError, archive_message, ensure_label, get_message, get_service, list_messages
 from app.models import ClassificationResult, EmailMessage
 from app.parser import parse
 
@@ -47,6 +52,7 @@ def print_classification(
 
 def run_pipeline() -> None:
     print(f"MODE={MODE}")
+    print(f"CONFIDENCE_THRESHOLD={CONFIDENCE_THRESHOLD}")
     if MODE == "dry_run":
         print("Dry run enabled — classifications only; Gmail will not be modified.\n")
 
@@ -84,8 +90,6 @@ def cmd_ensure_label() -> None:
         print(f"Authentication error: {exc}")
         raise SystemExit(1) from exc
 
-    from app.gmail import ensure_label
-
     label_id = ensure_label(service, GMAIL_LABEL)
     print(f"Label ready: {GMAIL_LABEL!r} (id={label_id})")
 
@@ -107,7 +111,45 @@ def cmd_apply_label(message_id: str) -> None:
         raise SystemExit(1) from exc
 
     print(f"Applied label {label_name!r} to message {message_id}")
-    print("Note: message was NOT archived (Lesson 6).")
+    print("Note: message was NOT archived. Use label-and-archive to archive.")
+
+
+def cmd_archive(message_id: str) -> None:
+    """Archive one message by removing INBOX (no label changes)."""
+    if not gmail_writes_allowed():
+        print(
+            f"Refusing to archive in MODE={MODE}. "
+            "Set MODE=approval or MODE=automatic for a single test archive."
+        )
+        raise SystemExit(1)
+
+    try:
+        service = get_service()
+        archive_message(service, message_id)
+    except GmailAuthError as exc:
+        print(f"Authentication error: {exc}")
+        raise SystemExit(1) from exc
+
+    print(f"Archived message {message_id} (removed INBOX label)")
+
+
+def cmd_label_and_archive(message_id: str) -> None:
+    """Apply To Process label and archive one message."""
+    if not gmail_writes_allowed():
+        print(
+            f"Refusing to label/archive in MODE={MODE}. "
+            "Set MODE=approval or MODE=automatic first."
+        )
+        raise SystemExit(1)
+
+    try:
+        service = get_service()
+        label_name = label_and_archive(service, message_id)
+    except GmailAuthError as exc:
+        print(f"Authentication error: {exc}")
+        raise SystemExit(1) from exc
+
+    print(f"Labeled {label_name!r} and archived message {message_id}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -122,6 +164,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     apply.add_argument("message_id", help="Gmail message id")
 
+    archive = sub.add_parser(
+        "archive",
+        help="Archive one message by removing INBOX (requires MODE!=dry_run)",
+    )
+    archive.add_argument("message_id", help="Gmail message id")
+
+    both = sub.add_parser(
+        "label-and-archive",
+        help="Label To Process + archive one message (requires MODE!=dry_run)",
+    )
+    both.add_argument("message_id", help="Gmail message id")
+
     return parser
 
 
@@ -134,6 +188,12 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "apply-label":
         cmd_apply_label(args.message_id)
+        return
+    if args.command == "archive":
+        cmd_archive(args.message_id)
+        return
+    if args.command == "label-and-archive":
+        cmd_label_and_archive(args.message_id)
         return
 
     run_pipeline()

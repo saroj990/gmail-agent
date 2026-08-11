@@ -183,3 +183,22 @@ def apply_label(
         )
         .execute()
     )
+
+
+def archive_message(
+    service: Resource,
+    message_id: str,
+    *,
+    user_id: str = "me",
+) -> dict[str, Any]:
+    """Archive a message by removing the INBOX label."""
+    return (
+        service.users()
+        .messages()
+        .modify(
+            userId=user_id,
+            id=message_id,
+            body={"removeLabelIds": ["INBOX"]},
+        )
+        .execute()
+    )

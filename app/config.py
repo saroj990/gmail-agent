@@ -28,6 +28,11 @@ if MODE not in ALLOWED_MODES:
 
 GMAIL_LABEL = os.getenv("GMAIL_LABEL", "To Process")
 
+# Minimum confidence required before labeling + archiving.
+CONFIDENCE_THRESHOLD = float(
+    os.getenv("CONFIDENCE_THRESHOLD", os.getenv("CLASSIFICATION_THRESHOLD", "0.95"))
+)
+
 # Lesson 5+: modify scope is required to create/apply labels.
 # This does NOT allow permanent delete.
 GMAIL_SCOPES = ("https://www.googleapis.com/auth/gmail.modify",)

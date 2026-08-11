@@ -1,4 +1,4 @@
-"""Tests for dry-run action gating and Lesson 5 label execution."""
+"""Tests for action gating, labels, and archive."""
 
 from __future__ import annotations
 
@@ -10,19 +10,23 @@ from app.actions import (
     apply_to_process_label,
     execute_decision,
     gmail_writes_allowed,
+    label_and_archive,
+    meets_archive_guards,
     proposed_action,
 )
 from app.models import Action, Category, ClassificationResult, Importance
 
 
 def _decision(
+    *,
     action: Action = Action.LABEL_AND_ARCHIVE,
     category: Category = Category.TO_PROCESS,
+    confidence: float = 0.99,
 ) -> ClassificationResult:
     return ClassificationResult(
         category=category,
         importance=Importance.LOW,
-        confidence=0.99,
+        confidence=confidence,
         reason="promo",
         action=action,
     )
@@ -37,15 +41,45 @@ def test_gmail_writes_allowed_in_later_modes() -> None:
     assert gmail_writes_allowed("automatic") is True
 
 
+def test_meets_archive_guards_requires_to_process_and_confidence() -> None:
+    ok, _ = meets_archive_guards(_decision(), mode="automatic", threshold=0.95)
+    assert ok is True
+
+    ok, reason = meets_archive_guards(
+        _decision(confidence=0.5), mode="automatic", threshold=0.95
+    )
+    assert ok is False
+    assert "confidence" in reason
+
+    ok, reason = meets_archive_guards(
+        _decision(category=Category.IMPORTANT, action=Action.LEAVE_IN_INBOX),
+        mode="automatic",
+        threshold=0.95,
+    )
+    assert ok is False
+    assert "IMPORTANT" in reason
+
+
 def test_execute_decision_skips_in_dry_run() -> None:
     note = execute_decision(_decision(), mode="dry_run")
     assert note.startswith("skipped (dry_run)")
     assert "LABEL_AND_ARCHIVE" in note
 
 
-def test_execute_decision_applies_label_only_when_allowed() -> None:
+def test_execute_decision_skips_low_confidence() -> None:
+    note = execute_decision(
+        _decision(confidence=0.5),
+        mode="automatic",
+        service=MagicMock(),
+        message_id="msg-1",
+    )
+    assert note.startswith("skipped (confidence")
+    assert "LABEL_AND_ARCHIVE" in note
+
+
+def test_execute_decision_labels_and_archives_when_allowed() -> None:
     service = MagicMock()
-    with patch("app.actions.apply_to_process_label", return_value="To Process") as mock_apply:
+    with patch("app.actions.label_and_archive", return_value="To Process") as mock_fn:
         note = execute_decision(
             _decision(),
             mode="automatic",
@@ -53,9 +87,8 @@ def test_execute_decision_applies_label_only_when_allowed() -> None:
             message_id="msg-1",
         )
 
-    mock_apply.assert_called_once_with(service, "msg-1")
-    assert "applied label: To Process" in note
-    assert "archive deferred" in note
+    mock_fn.assert_called_once_with(service, "msg-1")
+    assert note == "labeled 'To Process' and archived"
 
 
 def test_execute_decision_no_write_for_important() -> None:
@@ -84,6 +117,19 @@ def test_apply_to_process_label_ensures_and_applies() -> None:
     assert name == "To Process"
     mock_ensure.assert_called_once_with(service, "To Process")
     mock_apply.assert_called_once_with(service, "msg-1", "Label_9")
+
+
+def test_label_and_archive_calls_both_operations() -> None:
+    service = MagicMock()
+    with (
+        patch("app.actions.apply_to_process_label", return_value="To Process") as mock_label,
+        patch("app.actions.archive_message") as mock_archive,
+    ):
+        name = label_and_archive(service, "msg-1")
+
+    assert name == "To Process"
+    mock_label.assert_called_once_with(service, "msg-1", label_name=None)
+    mock_archive.assert_called_once_with(service, "msg-1")
 
 
 def test_proposed_action_returns_decision_action() -> None:
