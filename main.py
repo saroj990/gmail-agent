@@ -1,10 +1,11 @@
-"""Entrypoint: fetch, parse, and print recent Gmail messages (read-only)."""
+"""Entrypoint: fetch, parse, and classify recent Gmail messages (read-only)."""
 
 from __future__ import annotations
 
+from app.classifier import ClassifierError, classify
 from app.config import MAX_EMAILS_PER_RUN
 from app.gmail import GmailAuthError, get_message, get_service, list_messages
-from app.models import EmailMessage
+from app.models import ClassificationResult, EmailMessage
 from app.parser import parse
 
 
@@ -20,23 +21,18 @@ def fetch_recent_emails(max_results: int = MAX_EMAILS_PER_RUN) -> list[EmailMess
     return emails
 
 
-def print_emails(emails: list[EmailMessage]) -> None:
-    """Print parsed emails in a readable Lesson 2 format."""
-    print(f"Found {len(emails)} emails\n")
-
-    for index, email in enumerate(emails, start=1):
-        body_preview = email.body.replace("\n", " ").strip()
-        if len(body_preview) > 160:
-            body_preview = body_preview[:157] + "..."
-
-        print(f"{index}.")
-        print(f"From: {email.sender}")
-        print(f"To: {email.recipient}")
-        print(f"Subject: {email.subject}")
-        print(f"Date: {email.date}")
-        print(f"Snippet: {email.snippet}")
-        print(f"Body: {body_preview}")
-        print()
+def print_classification(index: int, email: EmailMessage, decision: ClassificationResult) -> None:
+    """Print one email and its classification decision."""
+    print(f"[{index}]")
+    print(f"From: {email.sender}")
+    print(f"Subject: {email.subject}")
+    print()
+    print(f"Category: {decision.category.value}")
+    print(f"Importance: {decision.importance.value}")
+    print(f"Confidence: {decision.confidence:.2f}")
+    print(f"Action: {decision.action.value}")
+    print(f"Reason: {decision.reason}")
+    print()
 
 
 def main() -> None:
@@ -46,7 +42,15 @@ def main() -> None:
         print(f"Authentication error: {exc}")
         raise SystemExit(1) from exc
 
-    print_emails(emails)
+    print(f"Classifying {len(emails)} emails...\n")
+
+    try:
+        for index, email in enumerate(emails, start=1):
+            decision = classify(email)
+            print_classification(index, email, decision)
+    except ClassifierError as exc:
+        print(f"Classifier error: {exc}")
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

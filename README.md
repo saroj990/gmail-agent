@@ -1,6 +1,6 @@
 # Gmail AI Inbox Agent
 
-Local-first Gmail inbox agent. Currently **read-only**: OAuth + parse recent messages.
+Local-first Gmail inbox agent. Currently **read-only**: OAuth + parse + classify (no Gmail writes).
 
 ## Setup
 
@@ -12,10 +12,23 @@ pip install -r requirements.txt
 
 ### Google Cloud / Gmail API
 
-1. Create a Google Cloud project and enable **Gmail API**.
-2. Configure OAuth consent (add yourself as a test user).
-3. Create **OAuth client ID → Desktop app**.
-4. Save the downloaded JSON as `credentials.json` in the project root.
+1. Enable **Gmail API** and create **OAuth Desktop** credentials.
+2. Save as `credentials.json` in the project root.
+3. Add yourself as an OAuth test user.
+
+### Ollama (Lesson 3)
+
+```bash
+# Install Ollama, then:
+ollama pull qwen2.5:7b
+```
+
+Optional `.env` (see `.env.example`):
+
+```env
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
+```
 
 ### Run
 
@@ -23,7 +36,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-First run opens a browser for Google login and saves `token.json`.
+Fetches recent emails, parses them, classifies with Ollama, and prints decisions. Inbox is not modified.
 
 ### Tests
 
@@ -37,22 +50,11 @@ pytest
 |--------|--------|
 | 1 Gmail API (readonly OAuth) | Done |
 | 2 Email parser (Pydantic) | Done |
+| 3 AI classification (Ollama/Qwen) | Done |
 
 ## Safety
 
-- Scope: `https://www.googleapis.com/auth/gmail.readonly`
-- No labels, archive, delete, or send yet
+- Scope: `gmail.readonly`
+- Classifier never returns DELETE / MOVE_TO_SPAM
+- Invalid model output → UNKNOWN / NO_ACTION
 - Never commit `credentials.json`, `token.json`, or `.env`
-
-## Project layout
-
-```text
-app/
-  config.py
-  gmail.py
-  models.py
-  parser.py
-main.py
-tests/
-requirements.txt
-```
