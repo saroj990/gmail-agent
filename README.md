@@ -33,11 +33,22 @@ GMAIL_LABEL=To Process
 CONFIDENCE_THRESHOLD=0.95
 ```
 
-### Run (dry-run classify)
+### Interactive review (recommended)
+
+Always dry-runs first, prints a summary, then asks before changing Gmail:
 
 ```bash
-python main.py
+python main.py review
 ```
+
+For each high-confidence `TO_PROCESS` email:
+
+- `a` = label **To Process** + archive
+- `t` = move to **Trash** (recoverable; type `trash` to confirm)
+- `s` = skip
+- `q` = quit
+
+Permanent delete is not offered.
 
 ### Labels + archive (manual one-email test)
 

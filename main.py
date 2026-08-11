@@ -15,6 +15,7 @@ from app.config import CONFIDENCE_THRESHOLD, GMAIL_LABEL, MAX_EMAILS_PER_RUN, MO
 from app.gmail import GmailAuthError, archive_message, ensure_label, get_message, get_service, list_messages
 from app.models import ClassificationResult, EmailMessage
 from app.parser import parse
+from app.review import run_review
 
 
 def fetch_recent_emails(max_results: int = MAX_EMAILS_PER_RUN) -> list[EmailMessage]:
@@ -152,9 +153,29 @@ def cmd_label_and_archive(message_id: str) -> None:
     print(f"Labeled {label_name!r} and archived message {message_id}")
 
 
+def cmd_review() -> None:
+    """Always dry-run first, summarize, then ask before archive/trash."""
+    try:
+        service = get_service()
+    except GmailAuthError as exc:
+        print(f"Authentication error: {exc}")
+        raise SystemExit(1) from exc
+
+    try:
+        run_review(service)
+    except ClassifierError as exc:
+        print(f"Classifier error: {exc}")
+        raise SystemExit(1) from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Gmail AI Inbox Agent")
     sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser(
+        "review",
+        help="Dry-run all emails, show summary, then approve archive/trash one by one",
+    )
 
     sub.add_parser("ensure-label", help=f"Create/get the {GMAIL_LABEL!r} label")
 
@@ -183,6 +204,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "review":
+        cmd_review()
+        return
     if args.command == "ensure-label":
         cmd_ensure_label()
         return

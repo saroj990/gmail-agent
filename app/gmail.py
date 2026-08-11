@@ -202,3 +202,13 @@ def archive_message(
         )
         .execute()
     )
+
+
+def trash_message(
+    service: Resource,
+    message_id: str,
+    *,
+    user_id: str = "me",
+) -> dict[str, Any]:
+    """Move a message to Trash (recoverable). Never permanently deletes."""
+    return service.users().messages().trash(userId=user_id, id=message_id).execute()
