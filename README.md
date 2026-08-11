@@ -1,10 +1,8 @@
 # Gmail AI Inbox Agent
 
-Local-first Gmail inbox agent. Lesson 1 is **read-only**: authenticate with Google OAuth and print recent messages.
+Local-first Gmail inbox agent. Currently **read-only**: OAuth + parse recent messages.
 
-## Lesson 1 — setup
-
-### 1. Python env
+## Setup
 
 ```bash
 python3 -m venv .venv
@@ -12,48 +10,38 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Google Cloud / Gmail API
+### Google Cloud / Gmail API
 
-1. Create a Google Cloud project.
-2. Enable **Gmail API**.
-3. Configure the **OAuth consent screen** (External is fine for personal use; add your Google account as a test user).
-4. Create credentials: **OAuth client ID → Desktop app**.
-5. Download the JSON and save it in the project root as:
+1. Create a Google Cloud project and enable **Gmail API**.
+2. Configure OAuth consent (add yourself as a test user).
+3. Create **OAuth client ID → Desktop app**.
+4. Save the downloaded JSON as `credentials.json` in the project root.
 
-```text
-credentials.json
-```
-
-### 3. Run
+### Run
 
 ```bash
 python main.py
 ```
 
-On first run, a browser window opens for Google login. The refresh token is saved as `token.json`.
+First run opens a browser for Google login and saves `token.json`.
 
-Expected shape:
-
-```text
-Found 10 emails
-
-1.
-From: ...
-Subject: ...
-Date: ...
-Snippet: ...
-```
-
-### 4. Tests
+### Tests
 
 ```bash
 pytest
 ```
 
+## Lessons so far
+
+| Lesson | Status |
+|--------|--------|
+| 1 Gmail API (readonly OAuth) | Done |
+| 2 Email parser (Pydantic) | Done |
+
 ## Safety
 
-- Scope used: `https://www.googleapis.com/auth/gmail.readonly`
-- No labels, archive, delete, or send in Lesson 1
+- Scope: `https://www.googleapis.com/auth/gmail.readonly`
+- No labels, archive, delete, or send yet
 - Never commit `credentials.json`, `token.json`, or `.env`
 
 ## Project layout
@@ -62,6 +50,8 @@ pytest
 app/
   config.py
   gmail.py
+  models.py
+  parser.py
 main.py
 tests/
 requirements.txt
