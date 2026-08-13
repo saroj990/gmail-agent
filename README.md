@@ -25,9 +25,12 @@ rm token.json
 python main.py ensure-label
 ```
 
-### Ollama / config
+### Classifier / config
+
+Default is local Ollama. Gemini is optional and faster; email text is sent to Google.
 
 ```env
+LLM_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.1:8b
 MODE=dry_run
@@ -35,6 +38,16 @@ GMAIL_LABEL=To Process
 CONFIDENCE_THRESHOLD=0.95
 DATABASE_PATH=data/decisions.db
 ```
+
+To use Gemini, copy these into your **local** `.env` (not committed):
+
+```env
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-key-here
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Create the key at [Google AI Studio](https://aistudio.google.com/apikey).
 
 ### Modes ([Lesson 9](docs/lessons/09-human-in-the-loop.md))
 

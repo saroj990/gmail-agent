@@ -10,7 +10,14 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from app.config import (
+    GEMINI_API_BASE_URL,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    LLM_PROVIDER,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+)
 from app.models import (
     FORBIDDEN_ACTIONS,
     Action,
@@ -73,7 +80,7 @@ _BODY_LIMIT = 2000
 
 
 class ClassifierError(Exception):
-    """Raised when the classifier cannot reach Ollama or get a usable response."""
+    """Raised when the classifier cannot reach the LLM or get a usable response."""
 
 
 def _truncate(text: str, limit: int = _BODY_LIMIT) -> str:
@@ -177,16 +184,109 @@ def call_ollama(
     return str(content)
 
 
+def call_gemini(
+    *,
+    prompt: str,
+    system_prompt: str = SYSTEM_PROMPT,
+    api_key: str | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    timeout: float = 60.0,
+) -> str:
+    """Call Gemini generateContent and return the first candidate text."""
+    api_key = (api_key if api_key is not None else GEMINI_API_KEY).strip()
+    if not api_key:
+        raise ClassifierError(
+            "GEMINI_API_KEY is missing. Create a key at https://aistudio.google.com/apikey "
+            "and add it to your local .env."
+        )
+
+    model = model or GEMINI_MODEL
+    base_url = (base_url or GEMINI_API_BASE_URL).rstrip("/")
+    url = f"{base_url}/models/{model}:generateContent"
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "responseMimeType": "application/json",
+        },
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:400]
+        raise ClassifierError(
+            f"Gemini HTTP {exc.code} for model {model}: {detail}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise ClassifierError(
+            f"Could not reach Gemini at {base_url}. Check network access."
+        ) from exc
+
+    parts = (
+        body.get("candidates", [{}])[0]
+        .get("content", {})
+        .get("parts", [])
+    )
+    text = "".join(str(part.get("text", "")) for part in parts).strip()
+    if not text:
+        raise ClassifierError("Gemini returned an empty message")
+    return text
+
+
+def call_llm(
+    *,
+    prompt: str,
+    provider: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> str:
+    """Dispatch to the configured LLM provider."""
+    current = (provider or LLM_PROVIDER).strip().lower()
+    if current == "gemini":
+        return call_gemini(
+            prompt=prompt,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+        )
+    if current == "ollama":
+        return call_ollama(prompt=prompt, base_url=base_url, model=model)
+    raise ClassifierError(
+        f"Unknown LLM_PROVIDER={current!r}. Use ollama or gemini."
+    )
+
+
 def classify(
     email: EmailMessage,
     *,
+    provider: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
 ) -> ClassificationResult:
-    """Classify one email via Ollama and return a validated decision."""
+    """Classify one email and return a validated decision."""
     prompt = build_user_prompt(email)
     try:
-        raw_text = call_ollama(prompt=prompt, base_url=base_url, model=model)
+        raw_text = call_llm(
+            prompt=prompt,
+            provider=provider,
+            base_url=base_url,
+            model=model,
+            api_key=api_key,
+        )
         data = extract_json_object(raw_text)
         return parse_classification(data)
     except ClassifierError:

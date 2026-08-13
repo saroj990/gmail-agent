@@ -20,6 +20,21 @@ MAX_EMAILS_PER_RUN = int(os.getenv("MAX_EMAILS_PER_RUN", "20"))
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
+# Classifier backend: ollama (local, default) | gemini (Google AI Studio)
+ALLOWED_LLM_PROVIDERS = frozenset({"ollama", "gemini"})
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+if LLM_PROVIDER not in ALLOWED_LLM_PROVIDERS:
+    raise ValueError(
+        f"Invalid LLM_PROVIDER={LLM_PROVIDER!r}. Allowed: {sorted(ALLOWED_LLM_PROVIDERS)}"
+    )
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_API_BASE_URL = os.getenv(
+    "GEMINI_API_BASE_URL",
+    "https://generativelanguage.googleapis.com/v1beta",
+).rstrip("/")
+
 # Runtime mode: dry_run (default) | approval | automatic
 ALLOWED_MODES = frozenset({"dry_run", "approval", "automatic"})
 MODE = os.getenv("MODE", "dry_run").strip().lower()

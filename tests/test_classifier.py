@@ -136,7 +136,7 @@ def test_classify_happy_path() -> None:
     mock_response.__exit__.return_value = False
 
     with patch("app.classifier.urllib.request.urlopen", return_value=mock_response):
-        result = classify(SAMPLE_EMAIL)
+        result = classify(SAMPLE_EMAIL, provider="ollama")
 
     assert result.category == Category.TO_PROCESS
     assert result.action == Action.LABEL_AND_ARCHIVE
@@ -150,7 +150,7 @@ def test_classify_invalid_model_output_falls_back_to_unknown() -> None:
     mock_response.__exit__.return_value = False
 
     with patch("app.classifier.urllib.request.urlopen", return_value=mock_response):
-        result = classify(SAMPLE_EMAIL)
+        result = classify(SAMPLE_EMAIL, provider="ollama")
 
     assert result.category == Category.UNKNOWN
     assert result.action == Action.NO_ACTION
@@ -176,7 +176,7 @@ def test_classify_forbidden_action_falls_back_to_unknown() -> None:
     mock_response.__exit__.return_value = False
 
     with patch("app.classifier.urllib.request.urlopen", return_value=mock_response):
-        result = classify(SAMPLE_EMAIL)
+        result = classify(SAMPLE_EMAIL, provider="ollama")
 
     assert result.category == Category.UNKNOWN
     assert result.action == Action.NO_ACTION
@@ -190,4 +190,61 @@ def test_classify_raises_when_ollama_unreachable() -> None:
         side_effect=urllib.error.URLError("connection refused"),
     ):
         with pytest.raises(ClassifierError, match="Could not reach Ollama"):
-            classify(SAMPLE_EMAIL)
+            classify(SAMPLE_EMAIL, provider="ollama")
+
+
+def test_classify_gemini_happy_path() -> None:
+    payload = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": json.dumps(
+                                {
+                                    "category": "IMPORTANT",
+                                    "importance": "HIGH",
+                                    "confidence": 0.91,
+                                    "reason": "Interview invitation",
+                                    "action": "LEAVE_IN_INBOX",
+                                }
+                            )
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(payload).encode("utf-8")
+    mock_response.__enter__.return_value = mock_response
+    mock_response.__exit__.return_value = False
+
+    with patch("app.classifier.urllib.request.urlopen", return_value=mock_response):
+        result = classify(
+            SAMPLE_EMAIL,
+            provider="gemini",
+            api_key="test-key",
+            model="gemini-2.5-flash",
+        )
+
+    assert result.category == Category.IMPORTANT
+    assert result.action == Action.LEAVE_IN_INBOX
+    assert result.confidence == 0.91
+
+
+def test_classify_gemini_requires_api_key() -> None:
+    with pytest.raises(ClassifierError, match="GEMINI_API_KEY"):
+        classify(SAMPLE_EMAIL, provider="gemini", api_key="")
+
+
+def test_classify_gemini_empty_response_raises() -> None:
+    payload = {"candidates": [{"content": {"parts": []}}]}
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(payload).encode("utf-8")
+    mock_response.__enter__.return_value = mock_response
+    mock_response.__exit__.return_value = False
+
+    with patch("app.classifier.urllib.request.urlopen", return_value=mock_response):
+        with pytest.raises(ClassifierError, match="empty message"):
+            classify(SAMPLE_EMAIL, provider="gemini", api_key="test-key")
