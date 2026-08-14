@@ -1,4 +1,8 @@
-"""Parse Gmail API MIME messages into EmailMessage models."""
+"""Parse Gmail API MIME messages into EmailMessage models.
+
+Gmail returns nested MIME (plain, HTML, multipart). This layer prefers
+text/plain, converts HTML when needed, and never crashes on missing fields.
+"""
 
 from __future__ import annotations
 
@@ -70,6 +74,7 @@ def get_header(message: dict[str, Any], name: str) -> str:
 
 
 def _decode_body_data(data: str | None) -> str:
+    """Decode Gmail's URL-safe base64 body payload into UTF-8 text."""
     if not data:
         return ""
     padding = "=" * (-len(data) % 4)

@@ -1,4 +1,8 @@
-"""Application configuration loaded from environment variables."""
+"""Application configuration loaded from environment variables.
+
+Values come from a local `.env` file (never committed). Defaults keep the
+agent in dry-run with a local Ollama model so Gmail is not modified by accident.
+"""
 
 from __future__ import annotations
 
@@ -11,10 +15,12 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# OAuth client JSON from Google Cloud (Desktop app). Token is created on first login.
 CREDENTIALS_PATH = Path(
     os.getenv("CREDENTIALS_PATH", PROJECT_ROOT / "credentials.json")
 )
 TOKEN_PATH = Path(os.getenv("TOKEN_PATH", PROJECT_ROOT / "token.json"))
+# Cap how many newest messages Gmail list() returns per run.
 MAX_EMAILS_PER_RUN = int(os.getenv("MAX_EMAILS_PER_RUN", "20"))
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")

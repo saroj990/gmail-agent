@@ -163,6 +163,7 @@ class GmailAgent:
         if action in {Action.LEAVE_IN_INBOX, Action.NO_ACTION}:
             return f"no write: {action.value}"
 
+        # dry_run never calls Gmail write tools.
         if self.mode == "dry_run":
             return f"skipped (dry_run): {action.value}"
 

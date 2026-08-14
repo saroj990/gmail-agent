@@ -1,4 +1,8 @@
-"""Gmail API client (read + label modify)."""
+"""Gmail API client: OAuth, read messages, labels, archive, trash.
+
+Archive = remove the INBOX label. Trash is recoverable. There is no permanent
+delete helper here on purpose.
+"""
 
 from __future__ import annotations
 
@@ -46,6 +50,7 @@ def get_service(
             creds = None
 
     if not creds or not creds.valid:
+        # Refresh quietly when possible; otherwise open a browser login.
         if creds and creds.expired and creds.refresh_token and _scopes_granted(creds, scopes):
             creds.refresh(Request())
         else:

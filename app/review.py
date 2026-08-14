@@ -171,6 +171,7 @@ def run_review(
         print(f"Reason: {decision.reason}")
 
         while True:
+            # Trash requires typing "trash" so a stray Enter cannot delete from Inbox.
             choice = prompt_choice("[a]rchive / [t]rash / [s]kip / [q]uit: ", input_fn)
             if choice in {"a", "archive"}:
                 label_and_archive(service, email.message_id)

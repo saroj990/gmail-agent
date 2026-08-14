@@ -90,7 +90,10 @@ class GmailTools:
         }
 
     def invoke(self, tool_name: str, **kwargs: Any) -> Any:
-        """Call an allowlisted tool by name. Reject unknown/forbidden tools."""
+        """Call an allowlisted tool by name. Reject unknown/forbidden tools.
+
+        The agent must go through this method so it cannot invent Gmail APIs.
+        """
         name = tool_name.strip()
         if name in FORBIDDEN_TOOLS:
             raise ToolError(f"Forbidden tool: {name}")

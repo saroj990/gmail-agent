@@ -1,4 +1,14 @@
-"""Entrypoint: CLI over the Lesson 7 agent + helpers."""
+"""CLI entrypoint for the Gmail AI Inbox Agent.
+
+Default command (`python main.py`) runs the agent pipeline:
+Fetch → Parse → Classify → Validate → Decide → Execute.
+
+Subcommands are for one-off Gmail operations (label, archive, interactive review).
+MODE from config/.env controls whether Execute may change Gmail:
+  dry_run   — classify and print only (default)
+  approval  — ask y/N before label+archive
+  automatic — label+archive when confidence guards pass
+"""
 
 from __future__ import annotations
 
@@ -20,7 +30,7 @@ def fetch_recent_emails(max_results: int = MAX_EMAILS_PER_RUN) -> list[EmailMess
 
 
 def print_classification(index: int, result: AgentResult) -> None:
-    """Print one agent result."""
+    """Print one classified email and whether Gmail was changed."""
     email, decision = result.email, result.decision
     print(f"[{index}]")
     print(f"Message-ID: {email.message_id}")
@@ -37,6 +47,7 @@ def print_classification(index: int, result: AgentResult) -> None:
 
 
 def run_pipeline() -> None:
+    """Default path: run the agent over recent unprocessed emails."""
     print(f"MODE={MODE}")
     print(f"CONFIDENCE_THRESHOLD={CONFIDENCE_THRESHOLD}")
     if MODE == "dry_run":
@@ -61,7 +72,7 @@ def run_pipeline() -> None:
 
 
 def cmd_ensure_label() -> None:
-    """Create or fetch the configured Gmail label."""
+    """Create or fetch the configured Gmail label (usually 'To Process')."""
     try:
         service = get_service()
     except GmailAuthError as exc:
@@ -73,7 +84,8 @@ def cmd_ensure_label() -> None:
 
 
 def cmd_apply_label(message_id: str) -> None:
-    """Apply the To Process label to one message (no archive)."""
+    """Apply the To Process label to one message. Does not archive."""
+    # Manual writes are blocked in dry_run so a test apply cannot happen by accident.
     if not gmail_writes_allowed():
         print(
             f"Refusing to label in MODE={MODE}. "
@@ -93,7 +105,7 @@ def cmd_apply_label(message_id: str) -> None:
 
 
 def cmd_archive(message_id: str) -> None:
-    """Archive one message by removing INBOX (no label changes)."""
+    """Remove INBOX from one message (archive). Does not add a label."""
     if not gmail_writes_allowed():
         print(
             f"Refusing to archive in MODE={MODE}. "
@@ -112,7 +124,7 @@ def cmd_archive(message_id: str) -> None:
 
 
 def cmd_label_and_archive(message_id: str) -> None:
-    """Apply To Process label and archive one message."""
+    """Apply To Process and archive one message (typical TO_PROCESS action)."""
     if not gmail_writes_allowed():
         print(
             f"Refusing to label/archive in MODE={MODE}. "
@@ -131,7 +143,7 @@ def cmd_label_and_archive(message_id: str) -> None:
 
 
 def cmd_review() -> None:
-    """Always dry-run first, summarize, then ask before archive/trash."""
+    """Interactive flow: classify all fetched mail, then approve archive/trash."""
     try:
         service = get_service()
     except GmailAuthError as exc:
@@ -146,6 +158,7 @@ def cmd_review() -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build CLI: no subcommand = agent pipeline; named commands = helpers."""
     parser = argparse.ArgumentParser(description="Gmail AI Inbox Agent")
     sub = parser.add_subparsers(dest="command")
 
@@ -178,6 +191,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Dispatch a subcommand, or run the default agent pipeline."""
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -197,6 +211,7 @@ def main(argv: list[str] | None = None) -> None:
         cmd_label_and_archive(args.message_id)
         return
 
+    # python main.py with no subcommand
     run_pipeline()
 
 

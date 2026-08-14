@@ -1,4 +1,8 @@
-"""Gmail action execution gates, labels, and archive."""
+"""Gmail action execution gates, labels, and archive.
+
+The LLM proposes a category/action. This module decides whether a write is
+allowed (MODE + TO_PROCESS + confidence) and then calls gmail.py.
+"""
 
 from __future__ import annotations
 

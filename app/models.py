@@ -1,4 +1,8 @@
-"""Shared Pydantic models."""
+"""Shared Pydantic models for parsed mail and LLM decisions.
+
+The classifier must return ClassificationResult. Category always drives Action
+so the model cannot invent DELETE or a mismatched action.
+"""
 
 from __future__ import annotations
 
@@ -21,9 +25,11 @@ class EmailMessage(BaseModel):
 
 
 class Category(str, Enum):
-    IMPORTANT = "IMPORTANT"
-    TO_PROCESS = "TO_PROCESS"
-    UNKNOWN = "UNKNOWN"
+    """How much attention this email likely needs."""
+
+    IMPORTANT = "IMPORTANT"  # keep in Inbox
+    TO_PROCESS = "TO_PROCESS"  # low-value; label + archive when allowed
+    UNKNOWN = "UNKNOWN"  # not confident; do nothing
 
 
 class Importance(str, Enum):
@@ -33,11 +39,14 @@ class Importance(str, Enum):
 
 
 class Action(str, Enum):
+    """What deterministic code may do after classification. No delete/send."""
+
     LEAVE_IN_INBOX = "LEAVE_IN_INBOX"
     LABEL_AND_ARCHIVE = "LABEL_AND_ARCHIVE"
     NO_ACTION = "NO_ACTION"
 
 
+# If the model names these, we treat the output as invalid / UNKNOWN.
 FORBIDDEN_ACTIONS = frozenset({"DELETE", "MOVE_TO_SPAM"})
 
 
@@ -52,6 +61,7 @@ class ClassificationResult(BaseModel):
 
     @model_validator(mode="after")
     def align_action_with_category(self) -> ClassificationResult:
+        # Deterministic mapping: code, not the LLM, owns the final action.
         expected = {
             Category.IMPORTANT: Action.LEAVE_IN_INBOX,
             Category.TO_PROCESS: Action.LABEL_AND_ARCHIVE,

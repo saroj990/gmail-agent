@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS email_decisions (
 
 
 def utc_now_iso() -> str:
+    """UTC timestamp stored on each decision row (used to see what ran today)."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 

@@ -1,4 +1,8 @@
-"""Local Ollama email classifier (read-only decisions, no Gmail writes)."""
+"""Email classifier: Ollama (local) or Gemini (API).
+
+Does not write to Gmail. Invalid or forbidden model output becomes UNKNOWN /
+NO_ACTION. Connectivity errors are raised so the operator can see the backend is down.
+"""
 
 from __future__ import annotations
 
@@ -76,6 +80,7 @@ Allowed actions only:
 Never return DELETE or MOVE_TO_SPAM.
 """
 
+# Keep prompts bounded so local and API models stay fast/cheap.
 _BODY_LIMIT = 2000
 
 
@@ -292,4 +297,5 @@ def classify(
     except ClassifierError:
         raise
     except (ValueError, ValidationError, json.JSONDecodeError, TypeError) as exc:
+        # Bad JSON / schema → do nothing rather than act on garbage.
         return unknown_result(f"Invalid model output: {exc}")
