@@ -157,10 +157,21 @@ def cmd_review() -> None:
         raise SystemExit(1) from exc
 
 
+def cmd_serve(port: int) -> None:
+    """Start the local web UI + API on 127.0.0.1."""
+    import uvicorn
+
+    print(f"Web UI: http://localhost:{port}")
+    uvicorn.run("app.server:create_app", factory=True, host="127.0.0.1", port=port)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI: no subcommand = agent pipeline; named commands = helpers."""
     parser = argparse.ArgumentParser(description="Gmail AI Inbox Agent")
     sub = parser.add_subparsers(dest="command")
+
+    serve = sub.add_parser("serve", help="Start the local web UI on 127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
 
     sub.add_parser(
         "review",
@@ -195,6 +206,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "serve":
+        cmd_serve(args.port)
+        return
     if args.command == "review":
         cmd_review()
         return

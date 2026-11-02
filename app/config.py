@@ -20,8 +20,11 @@ CREDENTIALS_PATH = Path(
     os.getenv("CREDENTIALS_PATH", PROJECT_ROOT / "credentials.json")
 )
 TOKEN_PATH = Path(os.getenv("TOKEN_PATH", PROJECT_ROOT / "token.json"))
-# Cap how many newest messages Gmail list() returns per run.
+# Max unprocessed inbox messages to classify per run (pages through Inbox if needed).
 MAX_EMAILS_PER_RUN = int(os.getenv("MAX_EMAILS_PER_RUN", "20"))
+
+# Gmail search query when fetching mail for a run (default: Inbox only).
+GMAIL_INBOX_QUERY = os.getenv("GMAIL_INBOX_QUERY", "in:inbox").strip() or "in:inbox"
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
@@ -57,6 +60,11 @@ CONFIDENCE_THRESHOLD = float(
 # Lesson 10: local SQLite audit / dedupe store.
 DATABASE_PATH = Path(
     os.getenv("DATABASE_PATH", PROJECT_ROOT / "data" / "decisions.db")
+)
+
+# Web UI preferences (non-secret). Overrides the env defaults above for UI runs only.
+SETTINGS_PATH = Path(
+    os.getenv("SETTINGS_PATH", PROJECT_ROOT / "data" / "settings.json")
 )
 
 # Lesson 5+: modify scope is required to create/apply labels.

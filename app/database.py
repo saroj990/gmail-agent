@@ -36,6 +36,13 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def utc_today_start_iso() -> str:
+    """Start of the current UTC day (inclusive lower bound for ``count_since``)."""
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start.isoformat()
+
+
 class DecisionStore:
     """Local SQLite store for classification/action history."""
 
@@ -115,7 +122,25 @@ class DecisionStore:
                 (message_id,),
             ).fetchone()
 
+    def recent(self, limit: int = 50) -> list[dict]:
+        """Newest decisions first (web UI history)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM email_decisions ORDER BY created_at DESC, id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def count(self) -> int:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS n FROM email_decisions").fetchone()
+        return int(row["n"]) if row else 0
+
+    def count_since(self, since_iso: str) -> int:
+        """Count decisions saved on or after ``since_iso`` (ISO-8601 UTC)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM email_decisions WHERE created_at >= ?",
+                (since_iso,),
+            ).fetchone()
         return int(row["n"]) if row else 0

@@ -67,6 +67,30 @@ Richer interactive options (archive/trash/skip):
 python main.py review
 ```
 
+### Web UI
+
+A local Svelte UI with Google sign-in, a dashboard for dry runs and real runs,
+and a preferences page. Needs Node from [`.nvmrc`](.nvmrc) and pnpm.
+
+```bash
+nvm use
+cd web && pnpm install && pnpm build && cd ..
+python main.py serve          # http://localhost:8000
+```
+
+- **Dry run** classifies only and does not record emails as processed. You can
+  then tick eligible rows and click **Label + archive selected**.
+- **Run for real** labels and archives every `TO_PROCESS` email at or above the
+  confidence threshold, same as `MODE=automatic`.
+- **Preferences** (provider, Ollama URL and model, Gemini model, label,
+  threshold, emails per run) are saved to `data/settings.json` and only apply to
+  UI runs. The Gemini API key stays in `.env`. `MODE` in `.env` only affects
+  the CLI.
+
+The server binds to `127.0.0.1` only. For frontend development, run
+`python main.py serve` and `pnpm dev` (in `web/`) side by side; see
+[web/README.md](web/README.md).
+
 ### Run via agent ([Lesson 7](docs/lessons/07-agent-layer.md))
 
 ```bash
@@ -83,7 +107,10 @@ Gmail mutations go only through allowlisted tools in `app/tools.py`
 ### Memory ([Lesson 10](docs/lessons/10-sqlite-memory.md))
 
 Processed `message_id`s are stored in `data/decisions.db` (gitignored).
-Re-runs skip emails already in that database.
+Each run pages through **Inbox** (`GMAIL_INBOX_QUERY`, default `in:inbox`) until it
+finds up to **emails per run** messages that are not in that database, then classifies
+them. Run again with the same cap (e.g. 100) to work through the next batch.
+The dashboard **History** section shows how many were saved today (UTC).
 
 ```bash
 # 1) Dry-run and copy a Message-ID

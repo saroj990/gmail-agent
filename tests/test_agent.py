@@ -174,10 +174,7 @@ def test_run_skips_cached_message_ids(tmp_path) -> None:
     )
 
     tools = MagicMock()
-    tools.invoke.side_effect = [
-        [{"id": "msg-old", "threadId": "t0"}, {"id": "msg-new", "threadId": "t1"}],
-        email_new,
-    ]
+    tools.invoke.return_value = email_new
     agent = GmailAgent(
         service=MagicMock(),
         mode="dry_run",
@@ -185,13 +182,50 @@ def test_run_skips_cached_message_ids(tmp_path) -> None:
         store=store,
     )
 
-    with patch.object(agent, "process_email") as mock_process:
+    with (
+        patch(
+            "app.agent.collect_unprocessed_stubs",
+            return_value=([{"id": "msg-new", "threadId": "t1"}], 1),
+        ),
+        patch.object(agent, "process_email") as mock_process,
+    ):
         mock_process.return_value = MagicMock()
         results = agent.run()
 
     assert agent.skipped_cached == 1
     assert len(results) == 1
     mock_process.assert_called_once_with(email_new)
+
+
+def test_settings_drive_classifier_label_and_threshold(tmp_path) -> None:
+    from app.settings import default_settings
+
+    settings = default_settings().model_copy(
+        update={
+            "ollama_model": "qwen3:8b",
+            "gmail_label": "Later",
+            "confidence_threshold": 0.5,
+        }
+    )
+    email = EmailMessage(message_id="msg-1", thread_id="t1", subject="Sale")
+    tools = MagicMock()
+    tools.invoke.side_effect = ["Later", "msg-1"]
+    agent = GmailAgent(
+        service=MagicMock(),
+        mode="automatic",
+        tools=tools,
+        settings=settings,
+        store=DecisionStore(db_path=tmp_path / "decisions.db"),
+        persist=False,
+    )
+
+    with patch("app.agent.classify", return_value=_decision(confidence=0.6)) as mock_classify:
+        result = agent.process_email(email)
+
+    assert mock_classify.call_args.kwargs["model"] == "qwen3:8b"
+    assert result.execution_note == "labeled 'Later' and archived"
+    assert tools.invoke.call_args_list[0].kwargs["label_name"] == "Later"
+    assert agent.store.count() == 0
 
 
 def test_process_email_persists_decision(tmp_path) -> None:

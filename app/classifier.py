@@ -189,6 +189,17 @@ def call_ollama(
     return str(content)
 
 
+def list_ollama_models(base_url: str | None = None, *, timeout: float = 5.0) -> list[str]:
+    """Return names of models pulled into the Ollama server."""
+    base_url = (base_url or OLLAMA_BASE_URL).rstrip("/")
+    try:
+        with urllib.request.urlopen(f"{base_url}/api/tags", timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        raise ClassifierError(f"Could not reach Ollama at {base_url}. Is Ollama running?") from exc
+    return sorted(str(m["name"]) for m in body.get("models", []) if m.get("name"))
+
+
 def call_gemini(
     *,
     prompt: str,
