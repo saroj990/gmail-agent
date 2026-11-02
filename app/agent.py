@@ -17,6 +17,7 @@ from app.classifier import classify
 from app.config import GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
 from app.database import DecisionStore
 from app.models import Action, ClassificationResult, EmailMessage
+from app.settings import Settings
 from app.tools import GmailTools
 
 ALLOWED_ACTIONS = frozenset(
@@ -100,13 +101,22 @@ class GmailAgent:
         input_fn: Callable[[str], str] = input,
         store: DecisionStore | None = None,
         db_path: Path | None = None,
+        settings: Settings | None = None,
+        persist: bool = True,
     ) -> None:
         self.service = service
         self.mode = (mode or MODE).strip().lower()
-        self.max_emails = MAX_EMAILS_PER_RUN if max_emails is None else max_emails
+        self.settings = settings
+        if max_emails is None:
+            max_emails = settings.max_emails_per_run if settings else MAX_EMAILS_PER_RUN
+        self.max_emails = max_emails
+        self.label_name = settings.gmail_label if settings else None
+        self.threshold = settings.confidence_threshold if settings else None
         self.tools = tools or GmailTools(service=service)
         self.input_fn = input_fn
         self.store = store or DecisionStore(db_path=db_path)
+        # Web UI dry runs pass persist=False so a later real run still sees these emails.
+        self.persist = persist
         self.skipped_cached = 0
 
     def _sync_tools_service(self) -> GmailTools:
@@ -151,7 +161,9 @@ class GmailAgent:
 
     def _perform_label_and_archive(self, email: EmailMessage) -> str:
         tools = self._sync_tools_service()
-        label_name = tools.invoke("apply_label", message_id=email.message_id)
+        label_name = tools.invoke(
+            "apply_label", message_id=email.message_id, label_name=self.label_name
+        )
         tools.invoke("archive_email", message_id=email.message_id)
         return f"labeled '{label_name}' and archived"
 
@@ -170,7 +182,7 @@ class GmailAgent:
         if action != Action.LABEL_AND_ARCHIVE:
             raise AgentError(f"Unsupported action: {action.value}")
 
-        allowed, reason = meets_content_guards(decision)
+        allowed, reason = meets_content_guards(decision, threshold=self.threshold)
         if not allowed:
             return f"skipped ({reason}): {action.value}"
 
@@ -184,15 +196,20 @@ class GmailAgent:
 
     def process_email(self, email: EmailMessage) -> AgentResult:
         """Run classify → validate → decide → execute, then persist memory."""
-        decision = validate_decision(classify(email))
+        if self.settings is None:
+            raw_decision = classify(email)
+        else:
+            raw_decision = classify(email, **self.settings.classifier_kwargs())
+        decision = validate_decision(raw_decision)
         action = decide(decision)
         execution_note = self.execute(email, decision, action)
-        self.store.save_decision(
-            email,
-            decision,
-            action=action.value,
-            execution_note=execution_note,
-        )
+        if self.persist:
+            self.store.save_decision(
+                email,
+                decision,
+                action=action.value,
+                execution_note=execution_note,
+            )
         return AgentResult(
             email=email,
             decision=decision,
@@ -206,14 +223,27 @@ class GmailAgent:
 
         return self.process_email(parse(raw_message))
 
-    def run(self) -> list[AgentResult]:
-        """Run the full pipeline over recent unprocessed emails."""
+    def run(
+        self,
+        *,
+        on_fetched: Callable[[int], None] | None = None,
+        on_result: Callable[[AgentResult], None] | None = None,
+    ) -> list[AgentResult]:
+        """Run the full pipeline over recent unprocessed emails.
+
+        on_fetched(total) and on_result(result) let callers report progress.
+        """
         results: list[AgentResult] = []
         emails = self.fetch_emails()
         if self.skipped_cached:
             print(f"Skipping {self.skipped_cached} already-processed email(s) from memory.\n")
+        if on_fetched:
+            on_fetched(len(emails))
         for email in emails:
-            results.append(self.process_email(email))
+            result = self.process_email(email)
+            results.append(result)
+            if on_result:
+                on_result(result)
         return results
 
 

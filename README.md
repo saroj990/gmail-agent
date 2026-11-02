@@ -67,6 +67,30 @@ Richer interactive options (archive/trash/skip):
 python main.py review
 ```
 
+### Web UI
+
+A local Svelte UI with Google sign-in, a dashboard for dry runs and real runs,
+and a preferences page. Needs Node from [`.nvmrc`](.nvmrc) and pnpm.
+
+```bash
+nvm use
+cd web && pnpm install && pnpm build && cd ..
+python main.py serve          # http://localhost:8000
+```
+
+- **Dry run** classifies only and does not record emails as processed. You can
+  then tick eligible rows and click **Label + archive selected**.
+- **Run for real** labels and archives every `TO_PROCESS` email at or above the
+  confidence threshold, same as `MODE=automatic`.
+- **Preferences** (provider, Ollama URL and model, Gemini model, label,
+  threshold, emails per run) are saved to `data/settings.json` and only apply to
+  UI runs. The Gemini API key stays in `.env`. `MODE` in `.env` only affects
+  the CLI.
+
+The server binds to `127.0.0.1` only. For frontend development, run
+`python main.py serve` and `pnpm dev` (in `web/`) side by side; see
+[web/README.md](web/README.md).
+
 ### Run via agent ([Lesson 7](docs/lessons/07-agent-layer.md))
 
 ```bash

@@ -115,6 +115,15 @@ class DecisionStore:
                 (message_id,),
             ).fetchone()
 
+    def recent(self, limit: int = 50) -> list[dict]:
+        """Newest decisions first (web UI history)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM email_decisions ORDER BY created_at DESC, id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def count(self) -> int:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS n FROM email_decisions").fetchone()

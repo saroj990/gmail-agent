@@ -59,6 +59,11 @@ DATABASE_PATH = Path(
     os.getenv("DATABASE_PATH", PROJECT_ROOT / "data" / "decisions.db")
 )
 
+# Web UI preferences (non-secret). Overrides the env defaults above for UI runs only.
+SETTINGS_PATH = Path(
+    os.getenv("SETTINGS_PATH", PROJECT_ROOT / "data" / "settings.json")
+)
+
 # Lesson 5+: modify scope is required to create/apply labels.
 # This does NOT allow permanent delete.
 GMAIL_SCOPES = ("https://www.googleapis.com/auth/gmail.modify",)

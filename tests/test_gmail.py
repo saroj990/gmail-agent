@@ -5,9 +5,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.auth.exceptions import RefreshError, TransportError
 
 from app.gmail import (
     GmailAuthError,
+    GmailNotSignedInError,
     get_header,
     get_message,
     get_service,
@@ -115,3 +117,75 @@ def test_get_service_builds_client_with_valid_token(tmp_path) -> None:
         "gmail", "v1", credentials=fake_creds, cache_discovery=False
     )
     assert service is mock_build.return_value
+
+
+def test_get_service_non_interactive_without_token_raises(tmp_path) -> None:
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text("{}", encoding="utf-8")
+
+    with (
+        patch("app.gmail.InstalledAppFlow") as mock_flow,
+        pytest.raises(GmailNotSignedInError),
+    ):
+        get_service(
+            credentials_path=credentials_file,
+            token_path=tmp_path / "token.json",
+            interactive=False,
+        )
+    mock_flow.from_client_secrets_file.assert_not_called()
+
+
+def test_get_service_unreadable_token_raises_auth_error(tmp_path) -> None:
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text("{}", encoding="utf-8")
+    token_file = tmp_path / "token.json"
+    token_file.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(GmailAuthError, match="unreadable"):
+        get_service(credentials_path=credentials_file, token_path=token_file)
+
+
+def _expired_creds(refresh_side_effect: Exception) -> MagicMock:
+    creds = MagicMock()
+    creds.valid = False
+    creds.expired = True
+    creds.refresh_token = "refresh-token"
+    creds.scopes = ["https://www.googleapis.com/auth/gmail.modify"]
+    creds.refresh.side_effect = refresh_side_effect
+    return creds
+
+
+def test_get_service_raises_auth_error_when_refresh_token_rejected(tmp_path) -> None:
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text("{}", encoding="utf-8")
+    token_file = tmp_path / "token.json"
+    token_file.write_text("{}", encoding="utf-8")
+    creds = _expired_creds(
+        RefreshError("invalid_grant: Bad Request", {"error": "invalid_grant"})
+    )
+
+    with (
+        patch("app.gmail.Credentials.from_authorized_user_file", return_value=creds),
+        patch("app.gmail.build") as mock_build,
+        pytest.raises(GmailAuthError, match="no longer valid") as excinfo,
+    ):
+        get_service(credentials_path=credentials_file, token_path=token_file)
+
+    assert str(token_file) in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, RefreshError)
+    mock_build.assert_not_called()
+    assert token_file.read_text(encoding="utf-8") == "{}"
+
+
+def test_get_service_raises_auth_error_when_google_unreachable(tmp_path) -> None:
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text("{}", encoding="utf-8")
+    token_file = tmp_path / "token.json"
+    token_file.write_text("{}", encoding="utf-8")
+    creds = _expired_creds(TransportError("connection refused"))
+
+    with (
+        patch("app.gmail.Credentials.from_authorized_user_file", return_value=creds),
+        pytest.raises(GmailAuthError, match="Could not reach Google"),
+    ):
+        get_service(credentials_path=credentials_file, token_path=token_file)
