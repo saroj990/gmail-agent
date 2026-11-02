@@ -437,7 +437,13 @@ def create_app(
 
     @app.get("/api/history")
     def history(limit: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
-        return {"items": decision_store.recent(limit), "total": decision_store.count()}
+        from app.database import utc_today_start_iso
+
+        return {
+            "items": decision_store.recent(limit),
+            "total": decision_store.count(),
+            "processed_today": decision_store.count_since(utc_today_start_iso()),
+        }
 
     if static_dir is not None and (static_dir / SPA_FALLBACK).exists():
         root = static_dir.resolve()

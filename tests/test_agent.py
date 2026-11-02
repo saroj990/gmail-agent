@@ -174,10 +174,7 @@ def test_run_skips_cached_message_ids(tmp_path) -> None:
     )
 
     tools = MagicMock()
-    tools.invoke.side_effect = [
-        [{"id": "msg-old", "threadId": "t0"}, {"id": "msg-new", "threadId": "t1"}],
-        email_new,
-    ]
+    tools.invoke.return_value = email_new
     agent = GmailAgent(
         service=MagicMock(),
         mode="dry_run",
@@ -185,7 +182,13 @@ def test_run_skips_cached_message_ids(tmp_path) -> None:
         store=store,
     )
 
-    with patch.object(agent, "process_email") as mock_process:
+    with (
+        patch(
+            "app.agent.collect_unprocessed_stubs",
+            return_value=([{"id": "msg-new", "threadId": "t1"}], 1),
+        ),
+        patch.object(agent, "process_email") as mock_process,
+    ):
         mock_process.return_value = MagicMock()
         results = agent.run()
 

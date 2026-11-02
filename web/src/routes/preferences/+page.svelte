@@ -173,7 +173,10 @@
 			<label class="field">
 				<span>Emails per run</span>
 				<input type="number" min="1" max="100" bind:value={form.max_emails_per_run} required />
-				<div class="hint">Newest emails fetched per run (already-processed ones are skipped).</div>
+				<div class="hint">
+					Up to this many unprocessed Inbox messages per run; older processed mail is skipped
+					and the next batch is fetched automatically.
+				</div>
 			</label>
 		</section>
 

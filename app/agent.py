@@ -14,7 +14,8 @@ from googleapiclient.discovery import Resource
 
 from app.actions import meets_content_guards, proposed_action
 from app.classifier import classify
-from app.config import GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
+from app.config import GMAIL_INBOX_QUERY, GMAIL_LABEL, MAX_EMAILS_PER_RUN, MODE
+from app.gmail import collect_unprocessed_stubs
 from app.database import DecisionStore
 from app.models import Action, ClassificationResult, EmailMessage
 from app.settings import Settings
@@ -127,37 +128,35 @@ class GmailAgent:
         return self.tools
 
     def fetch_emails(self) -> list[EmailMessage]:
-        """Fetch recent emails via tools; skip ids already in SQLite."""
+        """Fetch up to max_emails Inbox messages not yet in SQLite memory."""
         tools = self._sync_tools_service()
-        stubs = tools.invoke("get_recent_emails", max_results=self.max_emails)
+        service = tools._ensure_service()
+        stubs, self.skipped_cached = collect_unprocessed_stubs(
+            service,
+            limit=self.max_emails,
+            should_skip=self.store.has_message,
+            query=GMAIL_INBOX_QUERY,
+        )
         emails: list[EmailMessage] = []
-        self.skipped_cached = 0
         for stub in stubs:
-            message_id = stub["id"]
-            if self.store.has_message(message_id):
-                self.skipped_cached += 1
-                continue
-            emails.append(tools.invoke("read_email", message_id=message_id))
-        if tools.service is not None:
-            self.service = tools.service
+            emails.append(tools.invoke("read_email", message_id=stub["id"]))
+        self.service = service
         return emails
 
     def fetch_raw_messages(self) -> list[dict]:
         """Compatibility helper used by older CLI helpers."""
         tools = self._sync_tools_service()
-        stubs = tools.invoke("get_recent_emails", max_results=self.max_emails)
         from app.gmail import get_message
 
         service = tools._ensure_service()
+        stubs, self.skipped_cached = collect_unprocessed_stubs(
+            service,
+            limit=self.max_emails,
+            should_skip=self.store.has_message,
+            query=GMAIL_INBOX_QUERY,
+        )
         self.service = service
-        messages: list[dict] = []
-        self.skipped_cached = 0
-        for stub in stubs:
-            if self.store.has_message(stub["id"]):
-                self.skipped_cached += 1
-                continue
-            messages.append(get_message(service, stub["id"]))
-        return messages
+        return [get_message(service, stub["id"]) for stub in stubs]
 
     def _perform_label_and_archive(self, email: EmailMessage) -> str:
         tools = self._sync_tools_service()

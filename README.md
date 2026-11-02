@@ -107,7 +107,10 @@ Gmail mutations go only through allowlisted tools in `app/tools.py`
 ### Memory ([Lesson 10](docs/lessons/10-sqlite-memory.md))
 
 Processed `message_id`s are stored in `data/decisions.db` (gitignored).
-Re-runs skip emails already in that database.
+Each run pages through **Inbox** (`GMAIL_INBOX_QUERY`, default `in:inbox`) until it
+finds up to **emails per run** messages that are not in that database, then classifies
+them. Run again with the same cap (e.g. 100) to work through the next batch.
+The dashboard **History** section shows how many were saved today (UTC).
 
 ```bash
 # 1) Dry-run and copy a Message-ID

@@ -10,6 +10,7 @@ from google.auth.exceptions import RefreshError, TransportError
 from app.gmail import (
     GmailAuthError,
     GmailNotSignedInError,
+    collect_unprocessed_stubs,
     get_header,
     get_message,
     get_service,
@@ -71,6 +72,31 @@ def test_list_messages_empty_mailbox() -> None:
     service.users.return_value.messages.return_value.list.return_value.execute.return_value = {}
 
     assert list_messages(service) == []
+
+
+def test_collect_unprocessed_stubs_skips_and_pages() -> None:
+    service = MagicMock()
+    list_api = service.users.return_value.messages.return_value.list
+    list_api.return_value.execute.side_effect = [
+        {
+            "messages": [{"id": "seen", "threadId": "t0"}, {"id": "new-1", "threadId": "t1"}],
+            "nextPageToken": "page-2",
+        },
+        {"messages": [{"id": "new-2", "threadId": "t2"}]},
+    ]
+    skip = {"seen"}
+
+    stubs, skipped = collect_unprocessed_stubs(
+        service,
+        limit=2,
+        should_skip=lambda mid: mid in skip,
+        query="in:inbox",
+        page_size=2,
+    )
+
+    assert skipped == 1
+    assert [s["id"] for s in stubs] == ["new-1", "new-2"]
+    assert list_api.call_count == 2
 
 
 def test_get_message_fetches_by_id() -> None:

@@ -78,4 +78,5 @@ export interface HistoryItem {
 export interface HistoryResponse {
 	items: HistoryItem[];
 	total: number;
+	processed_today: number;
 }

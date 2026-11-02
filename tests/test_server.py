@@ -142,8 +142,11 @@ def test_dry_run_then_apply_selected(client, store) -> None:
     with (
         patch("app.server.get_service", return_value=MagicMock()),
         patch(
-            "app.tools.list_messages",
-            return_value=[{"id": "promo", "threadId": "t1"}, {"id": "boss", "threadId": "t2"}],
+            "app.agent.collect_unprocessed_stubs",
+            return_value=(
+                [{"id": "promo", "threadId": "t1"}, {"id": "boss", "threadId": "t2"}],
+                0,
+            ),
         ),
         patch("app.tools.get_message", side_effect=lambda _s, mid: {"id": mid}),
         patch("app.tools.parse", side_effect=lambda raw: emails[raw["id"]]),
@@ -183,7 +186,7 @@ def test_dry_run_then_apply_selected(client, store) -> None:
 def test_apply_rejects_automatic_run(client) -> None:
     with (
         patch("app.server.get_service", return_value=MagicMock()),
-        patch("app.tools.list_messages", return_value=[]),
+        patch("app.agent.collect_unprocessed_stubs", return_value=([], 0)),
     ):
         run = client.post("/api/runs", json={"mode": "automatic"}, headers=HEADERS).json()
         _wait_for_run(client, run["id"])

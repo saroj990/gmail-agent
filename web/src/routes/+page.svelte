@@ -10,6 +10,7 @@
 	let run = $state<Run | null>(null);
 	let history = $state<HistoryItem[]>([]);
 	let historyTotal = $state(0);
+	let processedToday = $state(0);
 	let error = $state<string | null>(null);
 	let busy = $state(false);
 	const selected = new SvelteSet<string>();
@@ -71,6 +72,7 @@
 			const response = await api.history(25);
 			history = response.items;
 			historyTotal = response.total;
+			processedToday = response.processed_today;
 		} catch (e) {
 			error = errorMessage(e);
 		}
@@ -271,7 +273,9 @@
 <section class="card">
 	<div class="row">
 		<h2>History</h2>
-		<span class="muted">{historyTotal} email(s) remembered from real runs</span>
+		<span class="muted">
+			{historyTotal} remembered · {processedToday} processed today (UTC)
+		</span>
 		<span class="spacer"></span>
 		<button onclick={loadHistory}>Refresh</button>
 	</div>

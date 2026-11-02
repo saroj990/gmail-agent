@@ -12,6 +12,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from app.config import GMAIL_INBOX_QUERY
+
 from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -247,6 +249,67 @@ def list_messages(
 
     response = service.users().messages().list(**kwargs).execute()
     return response.get("messages", [])
+
+
+def collect_unprocessed_stubs(
+    service: Resource,
+    *,
+    limit: int,
+    should_skip: Callable[[str], bool],
+    query: str | None = None,
+    page_size: int = 100,
+    max_scan: int | None = None,
+    user_id: str = "me",
+) -> tuple[list[dict[str, Any]], int]:
+    """Page through the mailbox until ``limit`` unstubs are found or mail runs out.
+
+    ``should_skip`` marks message ids already handled (SQLite memory). Returns
+    (stubs to process, number of skipped ids seen while scanning).
+    """
+    if limit < 1:
+        return [], 0
+
+    query = (query if query is not None else GMAIL_INBOX_QUERY).strip() or "in:inbox"
+    page_size = max(1, min(page_size, 500))
+    max_scan = max_scan if max_scan is not None else max(limit * 25, 500)
+
+    selected: list[dict[str, Any]] = []
+    skipped = 0
+    scanned = 0
+    page_token: str | None = None
+
+    while len(selected) < limit and scanned < max_scan:
+        batch = min(page_size, max_scan - scanned)
+        kwargs: dict[str, Any] = {
+            "userId": user_id,
+            "maxResults": batch,
+            "q": query,
+        }
+        if page_token:
+            kwargs["pageToken"] = page_token
+
+        response = service.users().messages().list(**kwargs).execute()
+        messages = response.get("messages") or []
+        if not messages:
+            break
+
+        for stub in messages:
+            scanned += 1
+            message_id = stub.get("id")
+            if not message_id:
+                continue
+            if should_skip(message_id):
+                skipped += 1
+                continue
+            selected.append(stub)
+            if len(selected) >= limit:
+                break
+
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    return selected, skipped
 
 
 def get_message(
