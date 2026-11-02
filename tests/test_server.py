@@ -94,7 +94,21 @@ def test_auth_status_not_signed_in_has_no_error(client) -> None:
         "error": None,
         "login_in_progress": False,
         "login_error": None,
+        "authorization_url": None,
     }
+
+
+def test_auth_login_returns_authorization_url(client) -> None:
+    def fake_web(*, on_authorization_url, timeout_seconds):
+        on_authorization_url("https://accounts.google.com/o/oauth2/auth?test=1")
+        from google.oauth2.credentials import Credentials
+
+        return Credentials(token="x")
+
+    with patch("app.server.run_login_flow_web", side_effect=fake_web):
+        body = client.post("/api/auth/login", headers=HEADERS).json()
+    assert body["login_in_progress"] is True
+    assert body["authorization_url"].startswith("https://accounts.google.com/")
 
 
 def test_auth_status_signed_in(client) -> None:

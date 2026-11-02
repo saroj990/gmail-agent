@@ -6,13 +6,16 @@ delete helper here on purpose.
 
 from __future__ import annotations
 
+import wsgiref.simple_server
+import wsgiref.util
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow, WSGITimeoutError
 from googleapiclient.discovery import Resource, build
 
 from app.config import CREDENTIALS_PATH, GMAIL_SCOPES, TOKEN_PATH
@@ -56,6 +59,95 @@ def _require_client_file(credentials_path: Path) -> None:
             f"Missing OAuth client file: {credentials_path}. "
             "Download Desktop credentials from Google Cloud and save as credentials.json."
         )
+
+
+_OAUTH_POPUP_SUCCESS_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Signed in</title>
+  <style>
+    body { font-family: system-ui, sans-serif; text-align: center; padding: 3rem 1.5rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #5f6b7a; }
+  </style>
+</head>
+<body>
+  <h1>Signed in to Gmail</h1>
+  <p>Returning to the app…</p>
+  <script>
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: "gmail-agent-auth", status: "success" }, "*");
+      }
+    } catch (e) {}
+    setTimeout(function () { window.close(); }, 600);
+  </script>
+</body>
+</html>"""
+
+
+class _OAuthCallbackApp:
+    """Local redirect target for the web UI popup sign-in."""
+
+    def __init__(self) -> None:
+        self.last_request_uri: str | None = None
+
+    def __call__(self, environ: dict[str, Any], start_response: Callable[..., Any]):
+        start_response("200 OK", [("Content-type", "text/html; charset=utf-8")])
+        self.last_request_uri = wsgiref.util.request_uri(environ)
+        return [_OAUTH_POPUP_SUCCESS_HTML.encode("utf-8")]
+
+
+def run_login_flow_web(
+    credentials_path: Path | None = None,
+    token_path: Path | None = None,
+    scopes: tuple[str, ...] | None = None,
+    *,
+    on_authorization_url: Callable[[str], None],
+    timeout_seconds: int | None = None,
+    host: str = "localhost",
+) -> Credentials:
+    """Wait for Google OAuth in a popup; caller opens ``on_authorization_url``."""
+    credentials_path = credentials_path or CREDENTIALS_PATH
+    token_path = token_path or TOKEN_PATH
+    scopes = scopes or GMAIL_SCOPES
+    _require_client_file(credentials_path)
+
+    flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), list(scopes))
+    wsgi_app = _OAuthCallbackApp()
+    wsgiref.simple_server.WSGIServer.allow_reuse_address = False
+    local_server = wsgiref.simple_server.make_server(host, 0, wsgi_app)
+
+    try:
+        flow.redirect_uri = f"http://{host}:{local_server.server_port}/"
+        auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+        on_authorization_url(auth_url)
+        local_server.timeout = timeout_seconds
+        local_server.handle_request()
+        try:
+            authorization_response = wsgi_app.last_request_uri.replace("http", "https")
+        except AttributeError as exc:
+            raise WSGITimeoutError(
+                "Timed out waiting for response from authorization server"
+            ) from exc
+        flow.fetch_token(authorization_response=authorization_response)
+    except WSGITimeoutError as exc:
+        raise GmailAuthError(
+            "Google sign-in did not complete (the popup was closed, denied, or timed out). "
+            "Try again."
+        ) from exc
+    except Exception as exc:
+        raise GmailAuthError(
+            "Google sign-in did not complete (the consent page was closed, denied, "
+            "or timed out). Try again."
+        ) from exc
+    finally:
+        local_server.server_close()
+
+    creds = flow.credentials
+    token_path.write_text(creds.to_json(), encoding="utf-8")
+    return creds
 
 
 def run_login_flow(

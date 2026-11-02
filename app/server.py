@@ -35,7 +35,7 @@ from app.gmail import (
     GmailNotSignedInError,
     get_profile_email,
     get_service,
-    run_login_flow,
+    run_login_flow_web,
     sign_out,
 )
 from app.models import Action
@@ -64,25 +64,47 @@ def _gmail_error_message(exc: HttpError) -> str:
 
 
 class LoginState:
-    """Tracks the browser-based Google sign-in running in a background thread."""
+    """Tracks popup Google sign-in running in a background thread."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._url_ready = threading.Event()
         self.in_progress = False
         self.error: str | None = None
+        self.authorization_url: str | None = None
 
-    def start(self) -> None:
+    def start(self) -> dict[str, Any]:
         with self._lock:
             if self.in_progress:
-                return
+                return {
+                    "login_in_progress": True,
+                    "authorization_url": self.authorization_url,
+                }
             self.in_progress = True
             self.error = None
+            self.authorization_url = None
+            self._url_ready.clear()
         threading.Thread(target=self._run, name="gmail-login", daemon=True).start()
+        self._url_ready.wait(timeout=10)
+        with self._lock:
+            return {
+                "login_in_progress": True,
+                "authorization_url": self.authorization_url,
+            }
 
     def _run(self) -> None:
         error: str | None = None
+
+        def on_url(url: str) -> None:
+            with self._lock:
+                self.authorization_url = url
+            self._url_ready.set()
+
         try:
-            run_login_flow(timeout_seconds=LOGIN_TIMEOUT_SECONDS)
+            run_login_flow_web(
+                on_authorization_url=on_url,
+                timeout_seconds=LOGIN_TIMEOUT_SECONDS,
+            )
         except GmailAuthError as exc:
             error = str(exc)
         except Exception:
@@ -91,6 +113,16 @@ class LoginState:
         with self._lock:
             self.in_progress = False
             self.error = error
+            if not self.authorization_url:
+                self._url_ready.set()
+
+    def public_fields(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "login_in_progress": self.in_progress,
+                "login_error": self.error,
+                "authorization_url": self.authorization_url,
+            }
 
 
 @dataclass
@@ -335,11 +367,8 @@ def create_app(
             "signed_in": False,
             "email": None,
             "error": None,
-            "login_in_progress": login.in_progress,
-            "login_error": login.error,
+            **login.public_fields(),
         }
-        if login.in_progress:
-            return status
         try:
             service = get_service(interactive=False)
             status["email"] = get_profile_email(service)
@@ -354,8 +383,13 @@ def create_app(
 
     @app.post("/api/auth/login", status_code=202)
     def auth_login() -> dict[str, Any]:
-        login.start()
-        return {"login_in_progress": True}
+        body = login.start()
+        if not body.get("authorization_url"):
+            raise HTTPException(
+                503,
+                "Could not start Google sign-in. Check credentials.json and try again.",
+            )
+        return body
 
     @app.post("/api/auth/logout")
     def auth_logout() -> dict[str, Any]:

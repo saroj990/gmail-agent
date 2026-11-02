@@ -17,3 +17,8 @@ export async function refreshAuth(): Promise<void> {
 		auth.loading = false;
 	}
 }
+
+/** Full reload so the static SPA always lands on the dashboard after OAuth. */
+export function goToDashboard(): void {
+	window.location.replace('/');
+}

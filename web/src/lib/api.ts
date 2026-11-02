@@ -1,6 +1,7 @@
 import type {
 	AuthStatus,
 	HistoryResponse,
+	LoginStartResponse,
 	Run,
 	RunMode,
 	Settings,
@@ -69,7 +70,7 @@ export function errorMessage(error: unknown): string {
 
 export const api = {
 	authStatus: () => request<AuthStatus>('GET', '/auth/status'),
-	login: () => request<{ login_in_progress: boolean }>('POST', '/auth/login'),
+	login: () => request<LoginStartResponse>('POST', '/auth/login'),
 	logout: () => request<{ signed_in: boolean }>('POST', '/auth/logout'),
 
 	getSettings: () => request<SettingsResponse>('GET', '/settings'),

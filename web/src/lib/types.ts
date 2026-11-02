@@ -24,6 +24,12 @@ export interface AuthStatus {
 	error: string | null;
 	login_in_progress: boolean;
 	login_error: string | null;
+	authorization_url: string | null;
+}
+
+export interface LoginStartResponse {
+	login_in_progress: boolean;
+	authorization_url: string | null;
 }
 
 export interface RunItem {

@@ -6,7 +6,7 @@
 	import { page } from '$app/state';
 	import favicon from '#lib/assets/favicon.svg';
 	import { api, errorMessage } from '#lib/api.ts';
-	import { auth, refreshAuth } from '#lib/auth.svelte.ts';
+	import { auth, goToDashboard, refreshAuth } from '#lib/auth.svelte.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -20,7 +20,7 @@
 	$effect(() => {
 		if (auth.loading || !auth.status) return;
 		if (!signedIn && !onLoginPage) goto(resolve('/login'), { replace: true });
-		if (signedIn && onLoginPage) goto(resolve('/'), { replace: true });
+		if (signedIn && onLoginPage) goToDashboard();
 	});
 
 	async function signOut() {
@@ -69,7 +69,10 @@
 	{/if}
 
 	{#if auth.loading}
-		<p class="muted">Loading…</p>
+		<div class="loading-screen">
+			<span class="spinner" aria-hidden="true"></span>
+			<span class="muted">Loading…</span>
+		</div>
 	{:else if signedIn || onLoginPage}
 		{@render children()}
 	{/if}
@@ -96,5 +99,27 @@
 	nav a.active {
 		color: var(--text);
 		background: var(--bg);
+	}
+
+	.loading-screen {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		padding: 2rem 0;
+	}
+
+	.spinner {
+		width: 1.1rem;
+		height: 1.1rem;
+		border: 2px solid var(--border);
+		border-top-color: var(--primary);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 </style>
